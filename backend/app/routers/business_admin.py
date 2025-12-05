@@ -1,0 +1,1022 @@
+from __future__ import annotations
+
+import csv
+import io
+import os
+import secrets
+from datetime import datetime, UTC, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import BaseModel, Field
+
+from ..config import get_settings
+from ..db import SQLALCHEMY_AVAILABLE, SessionLocal
+from ..db_models import (
+    AppointmentDB,
+    AuditEventDB,
+    Business,
+    ConversationDB,
+    ConversationMessageDB,
+    TechnicianDB,
+)
+from ..deps import require_admin_auth
+from ..metrics import metrics
+from ..repositories import appointments_repo, conversations_repo, customers_repo
+
+
+router = APIRouter(dependencies=[Depends(require_admin_auth)])
+
+
+class BusinessCreateRequest(BaseModel):
+    id: str | None = None
+    name: str
+    calendar_id: str | None = None
+
+
+class BusinessUpdateRequest(BaseModel):
+    name: str | None = None
+    calendar_id: str | None = None
+    status: str | None = None
+    vertical: str | None = None
+    owner_phone: str | None = None
+    emergency_keywords: str | None = None
+    default_reminder_hours: int | None = None
+    service_duration_config: str | None = None
+    open_hour: int | None = Field(default=None, ge=0, le=23)
+    close_hour: int | None = Field(default=None, ge=0, le=23)
+    closed_days: str | None = None
+    appointment_retention_days: int | None = Field(default=None, ge=1, le=3650)
+    conversation_retention_days: int | None = Field(default=None, ge=1, le=3650)
+    language_code: str | None = None
+    max_jobs_per_day: int | None = Field(default=None, ge=1, le=1000)
+    reserve_mornings_for_emergencies: bool | None = None
+    travel_buffer_minutes: int | None = Field(default=None, ge=0, le=240)
+    twilio_missed_statuses: str | None = None
+    retention_enabled: bool | None = None
+    retention_sms_template: str | None = None
+
+
+class BusinessResponse(BaseModel):
+    id: str
+    name: str
+    vertical: str | None = None
+    api_key: str | None = None
+    widget_token: str | None = None
+    calendar_id: str | None = None
+    status: str
+    owner_phone: str | None = None
+    emergency_keywords: str | None = None
+    default_reminder_hours: int | None = None
+    service_duration_config: str | None = None
+    created_at: datetime
+    open_hour: int | None = None
+    close_hour: int | None = None
+    closed_days: str | None = None
+    appointment_retention_days: int | None = None
+    conversation_retention_days: int | None = None
+    language_code: str | None = None
+    max_jobs_per_day: int | None = None
+    reserve_mornings_for_emergencies: bool | None = None
+    travel_buffer_minutes: int | None = None
+    twilio_missed_statuses: str | None = None
+    retention_enabled: bool | None = None
+    retention_sms_template: str | None = None
+
+
+class BusinessUsageResponse(BusinessResponse):
+    total_customers: int
+    sms_opt_out_customers: int
+    total_appointments: int
+    emergency_appointments: int
+    appointments_last_7_days: int
+    appointments_last_30_days: int
+    emergencies_last_7_days: int
+    emergencies_last_30_days: int
+    sms_owner_messages: int
+    sms_customer_messages: int
+    sms_total_messages: int
+    total_conversations: int
+    flagged_conversations: int
+    emergency_conversations: int
+    service_type_counts: dict[str, int] = Field(default_factory=dict)
+    emergency_service_type_counts: dict[str, int] = Field(default_factory=dict)
+    pending_reschedules: int = 0
+
+
+class TwilioConfigStatus(BaseModel):
+    provider: str
+    from_number_set: bool
+    owner_number_set: bool
+    account_sid_set: bool
+    auth_token_set: bool
+    verify_signatures: bool
+
+
+class TwilioBusinessHealth(BaseModel):
+    business_id: str
+    voice_requests: int
+    sms_requests: int
+    voice_errors: int
+    sms_errors: int
+
+
+class TwilioHealthResponse(BaseModel):
+    config: TwilioConfigStatus
+    twilio_voice_requests: int
+    twilio_voice_errors: int
+    twilio_sms_requests: int
+    twilio_sms_errors: int
+    per_business: list[TwilioBusinessHealth]
+
+
+class AdminEnvironmentResponse(BaseModel):
+    environment: str
+
+
+class RetentionPruneResponse(BaseModel):
+    appointments_deleted: int
+    conversations_deleted: int
+    conversation_messages_deleted: int
+
+
+class TechnicianCreateRequest(BaseModel):
+    name: str
+    color: str | None = None
+
+
+class TechnicianUpdateRequest(BaseModel):
+    name: str | None = None
+    color: str | None = None
+    is_active: bool | None = None
+
+
+class TechnicianResponse(BaseModel):
+    id: str
+    business_id: str
+    name: str
+    color: str | None = None
+    is_active: bool
+    created_at: datetime
+
+
+class GovernanceTenantSummary(BaseModel):
+    id: str
+    name: str
+    status: str
+    language_code: str | None = None
+    appointment_retention_days: int | None = None
+    conversation_retention_days: int | None = None
+    max_jobs_per_day: int | None = None
+    reserve_mornings_for_emergencies: bool | None = None
+    travel_buffer_minutes: int | None = None
+    twilio_missed_statuses: str | None = None
+
+
+class GovernanceSummaryResponse(BaseModel):
+    multi_tenant_mode: bool
+    business_count: int
+    require_business_api_key: bool
+    verify_twilio_signatures: bool
+    tenants: list[GovernanceTenantSummary]
+
+
+class AuditEvent(BaseModel):
+    id: int
+    created_at: datetime
+    actor_type: str
+    business_id: str | None = None
+    path: str
+    method: str
+    status_code: int
+
+
+def _get_db_session():
+    """Return a database session or raise a 503 HTTPException.
+
+    All admin/tenant endpoints rely on database support; centralising this
+    check keeps behaviour consistent while avoiding repeated boilerplate.
+    """
+    if not SQLALCHEMY_AVAILABLE:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database support is not available",
+        )
+    if SessionLocal is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database session factory is not available",
+        )
+    return SessionLocal()
+
+
+def _business_to_response(row: Business) -> BusinessResponse:
+    created_at = getattr(row, "created_at", datetime.now(UTC)).replace(tzinfo=UTC)
+    return BusinessResponse(
+        id=row.id,
+        name=row.name,
+        vertical=getattr(row, "vertical", None),
+        api_key=row.api_key,
+        widget_token=getattr(row, "widget_token", None),
+        calendar_id=getattr(row, "calendar_id", None),
+        status=getattr(row, "status", "ACTIVE"),
+        owner_phone=getattr(row, "owner_phone", None),
+        emergency_keywords=getattr(row, "emergency_keywords", None),
+        default_reminder_hours=getattr(row, "default_reminder_hours", None),
+        service_duration_config=getattr(row, "service_duration_config", None),
+        created_at=created_at,
+        open_hour=getattr(row, "open_hour", None),
+        close_hour=getattr(row, "close_hour", None),
+        closed_days=getattr(row, "closed_days", None),
+        appointment_retention_days=getattr(row, "appointment_retention_days", None),
+        conversation_retention_days=getattr(row, "conversation_retention_days", None),
+        language_code=getattr(row, "language_code", None),
+        max_jobs_per_day=getattr(row, "max_jobs_per_day", None),
+        reserve_mornings_for_emergencies=getattr(
+            row, "reserve_mornings_for_emergencies", None
+        ),
+        travel_buffer_minutes=getattr(row, "travel_buffer_minutes", None),
+        twilio_missed_statuses=getattr(row, "twilio_missed_statuses", None),
+        retention_enabled=getattr(row, "retention_enabled", None),
+        retention_sms_template=getattr(row, "retention_sms_template", None),
+    )
+
+
+def _technician_to_response(row: TechnicianDB) -> TechnicianResponse:
+    created_at = getattr(row, "created_at", datetime.now(UTC)).replace(tzinfo=UTC)
+    return TechnicianResponse(
+        id=row.id,
+        business_id=row.business_id,
+        name=row.name,
+        color=getattr(row, "color", None),
+        is_active=bool(getattr(row, "is_active", True)),
+        created_at=created_at,
+    )
+
+
+@router.get("/businesses", response_model=list[BusinessResponse])
+def list_businesses() -> list[BusinessResponse]:
+    session = _get_db_session()
+    try:
+        rows = session.query(Business).all()
+        return [_business_to_response(b) for b in rows]
+    finally:
+        session.close()
+
+
+@router.post("/businesses", response_model=BusinessResponse, status_code=status.HTTP_201_CREATED)
+def create_business(payload: BusinessCreateRequest) -> BusinessResponse:
+    business_id = payload.id or secrets.token_hex(8)
+    session = _get_db_session()
+    try:
+        if session.get(Business, business_id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Business with this ID already exists",
+            )
+        api_key = secrets.token_hex(16)
+        widget_token = secrets.token_hex(16)
+        now = datetime.now(UTC)
+        settings = get_settings()
+        calendar_id = payload.calendar_id or settings.calendar.calendar_id
+        row = Business(  # type: ignore[arg-type]
+            id=business_id,
+            name=payload.name,
+            vertical=getattr(settings, "default_vertical", "plumbing"),
+            api_key=api_key,
+            widget_token=widget_token,
+            calendar_id=calendar_id,
+            status="ACTIVE",
+            owner_phone=None,
+            emergency_keywords=None,
+            default_reminder_hours=None,
+            service_duration_config=None,
+            open_hour=None,
+            close_hour=None,
+            closed_days=None,
+            appointment_retention_days=None,
+            conversation_retention_days=None,
+            language_code=getattr(settings, "default_language_code", "en"),
+            max_jobs_per_day=None,
+            reserve_mornings_for_emergencies=False,
+            travel_buffer_minutes=None,
+            twilio_missed_statuses=None,
+            retention_enabled=True,
+            retention_sms_template=None,
+            created_at=now,
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return _business_to_response(row)
+    finally:
+        session.close()
+
+
+@router.patch("/businesses/{business_id}", response_model=BusinessResponse)
+def update_business(business_id: str, payload: BusinessUpdateRequest) -> BusinessResponse:
+    """Update mutable fields for a business (name, calendar_id)."""
+    session = _get_db_session()
+    try:
+        row = session.get(Business, business_id)
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Business not found",
+            )
+        if payload.name is not None:
+            row.name = payload.name
+        if payload.vertical is not None:
+            row.vertical = payload.vertical
+        if payload.calendar_id is not None:
+            row.calendar_id = payload.calendar_id
+        if payload.status is not None:
+            row.status = payload.status
+        if payload.owner_phone is not None:
+            row.owner_phone = payload.owner_phone
+        if payload.emergency_keywords is not None:
+            row.emergency_keywords = payload.emergency_keywords
+        if payload.default_reminder_hours is not None:
+            row.default_reminder_hours = payload.default_reminder_hours
+        if payload.service_duration_config is not None:
+            row.service_duration_config = payload.service_duration_config
+        if payload.appointment_retention_days is not None:
+            row.appointment_retention_days = payload.appointment_retention_days
+        if payload.conversation_retention_days is not None:
+            row.conversation_retention_days = payload.conversation_retention_days
+        if payload.language_code is not None:
+            row.language_code = payload.language_code
+        if payload.open_hour is not None:
+            row.open_hour = payload.open_hour
+        if payload.close_hour is not None:
+            row.close_hour = payload.close_hour
+        if payload.closed_days is not None:
+            row.closed_days = payload.closed_days
+        if payload.max_jobs_per_day is not None:
+            row.max_jobs_per_day = payload.max_jobs_per_day
+        if payload.reserve_mornings_for_emergencies is not None:
+            row.reserve_mornings_for_emergencies = payload.reserve_mornings_for_emergencies
+        if payload.travel_buffer_minutes is not None:
+            row.travel_buffer_minutes = payload.travel_buffer_minutes
+        if payload.twilio_missed_statuses is not None:
+            row.twilio_missed_statuses = payload.twilio_missed_statuses
+        if payload.retention_enabled is not None:
+            row.retention_enabled = payload.retention_enabled
+        if payload.retention_sms_template is not None:
+            row.retention_sms_template = payload.retention_sms_template
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return _business_to_response(row)
+    finally:
+        session.close()
+
+
+@router.post("/businesses/{business_id}/rotate-key", response_model=BusinessResponse)
+def rotate_api_key(business_id: str) -> BusinessResponse:
+    session = _get_db_session()
+    try:
+        row = session.get(Business, business_id)
+        if not row:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Business not found")
+        row.api_key = secrets.token_hex(16)
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return _business_to_response(row)
+    finally:
+        session.close()
+
+
+@router.post("/businesses/{business_id}/rotate-widget-token", response_model=BusinessResponse)
+def rotate_widget_token(business_id: str) -> BusinessResponse:
+    session = _get_db_session()
+    try:
+        row = session.get(Business, business_id)
+        if not row:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Business not found")
+        row.widget_token = secrets.token_hex(16)
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return _business_to_response(row)
+    finally:
+        session.close()
+
+
+class TenantDemoBusiness(BaseModel):
+    id: str
+    name: str
+    api_key: str
+    calendar_id: str | None = None
+
+
+class TenantDemoResponse(BaseModel):
+    businesses: list[TenantDemoBusiness]
+
+
+@router.post("/demo-tenants", response_model=TenantDemoResponse)
+def seed_demo_tenants() -> TenantDemoResponse:
+    """Seed two demo businesses (tenants) and sample data.
+
+    This endpoint is intended for local development and demos. It creates or
+    reuses two Business rows and then inserts a couple of customers and
+    appointments for each via the repository layer.
+    """
+    session = _get_db_session()
+    try:
+        tenants = []
+        for suffix in ("alpha", "beta"):
+            business_id = f"demo_{suffix}"
+            name = f"Demo Tenant {suffix.title()}"
+            row = session.get(Business, business_id)
+            if row is None:
+                api_key = secrets.token_hex(16)
+                widget_token = secrets.token_hex(16)
+                now = datetime.now(UTC)
+                row = Business(  # type: ignore[arg-type]
+                    id=business_id,
+                    name=name,
+                    api_key=api_key,
+                    calendar_id=None,
+                    widget_token=widget_token,
+                    status="ACTIVE",
+                    owner_phone=None,
+                    emergency_keywords=None,
+                    default_reminder_hours=None,
+                    service_duration_config=None,
+                    open_hour=None,
+                    close_hour=None,
+                    closed_days=None,
+                    appointment_retention_days=None,
+                    conversation_retention_days=None,
+                    language_code=get_settings().default_language_code,
+                    max_jobs_per_day=None,
+                    reserve_mornings_for_emergencies=False,
+                      travel_buffer_minutes=None,
+                      twilio_missed_statuses=None,
+                      created_at=now,
+                  )
+                session.add(row)
+                session.commit()
+                session.refresh(row)
+            tenants.append(
+                TenantDemoBusiness(
+                    id=row.id,
+                    name=row.name,
+                    api_key=row.api_key or "",
+                    calendar_id=getattr(row, "calendar_id", None),
+                )
+            )
+    finally:
+        session.close()
+
+    # Seed a couple of customers/appointments per tenant through repositories.
+    for t in tenants:
+        cust1 = customers_repo.upsert(
+            name=f"{t.name} Customer 1",
+            phone=f"+1555{secrets.randbelow(9000)+1000}",
+            email=None,
+            address="123 Demo St",
+            business_id=t.id,
+        )
+        cust2 = customers_repo.upsert(
+            name=f"{t.name} Customer 2",
+            phone=f"+1555{secrets.randbelow(9000)+1000}",
+            email=None,
+            address="456 Sample Ave",
+            business_id=t.id,
+        )
+        now = datetime.now(UTC)
+        appointments_repo.create(
+            customer_id=cust1.id,
+            start_time=now,
+            end_time=now,
+            service_type="Demo Service",
+            is_emergency=False,
+            description="Seeded demo appointment",
+            business_id=t.id,
+        )
+        appointments_repo.create(
+            customer_id=cust2.id,
+            start_time=now,
+            end_time=now,
+            service_type="Demo Service",
+            is_emergency=True,
+            description="Seeded emergency demo appointment",
+            business_id=t.id,
+        )
+
+    return TenantDemoResponse(businesses=tenants)
+
+
+def _build_business_usage(business_id: str, row: Business) -> BusinessUsageResponse:
+    """Aggregate simple per-tenant usage stats from repositories."""
+    customers = customers_repo.list_for_business(business_id)
+    appointments = appointments_repo.list_for_business(business_id)
+    conversations = conversations_repo.list_for_business(business_id)
+
+    total_customers = len(customers)
+    sms_opt_out_customers = sum(1 for c in customers if getattr(c, "sms_opt_out", False))
+    total_appointments = len(appointments)
+    emergency_appointments = sum(1 for a in appointments if getattr(a, "is_emergency", False))
+
+    total_conversations = len(conversations)
+    flagged_conversations = 0
+    emergency_conversations = 0
+    for conv in conversations:
+        if getattr(conv, "flagged_for_review", False):
+            flagged_conversations += 1
+        tags = getattr(conv, "tags", []) or []
+        outcome = getattr(conv, "outcome", "") or ""
+        combined = ((" ".join(tags) + " " + outcome)).lower()
+        if "emergency" in combined:
+            emergency_conversations += 1
+
+    # Per-tenant SMS metrics (in-memory, per-process).
+    sms_stats = metrics.sms_by_business.get(business_id)
+    sms_owner_messages = sms_stats.sms_sent_owner if sms_stats else 0
+    sms_customer_messages = sms_stats.sms_sent_customer if sms_stats else 0
+    sms_total_messages = sms_stats.sms_sent_total if sms_stats else 0
+
+    now = datetime.now(UTC)
+    window_7 = now - timedelta(days=7)
+    window_30 = now - timedelta(days=30)
+
+    appointments_last_7_days = 0
+    appointments_last_30_days = 0
+    emergencies_last_7_days = 0
+    emergencies_last_30_days = 0
+    service_type_counts: dict[str, int] = {}
+    emergency_service_type_counts: dict[str, int] = {}
+    pending_reschedules = 0
+
+    for appt in appointments:
+        start_time = getattr(appt, "start_time", None)
+        if not start_time:
+            continue
+        status = getattr(appt, "status", "SCHEDULED").upper()
+        if status == "PENDING_RESCHEDULE":
+            pending_reschedules += 1
+        service_type = getattr(appt, "service_type", None) or "unspecified"
+        service_type_counts[service_type] = service_type_counts.get(service_type, 0) + 1
+        if getattr(appt, "is_emergency", False):
+            emergency_service_type_counts[service_type] = (
+                emergency_service_type_counts.get(service_type, 0) + 1
+            )
+        if start_time <= now and start_time >= window_7:
+            appointments_last_7_days += 1
+            if getattr(appt, "is_emergency", False):
+                emergencies_last_7_days += 1
+        if start_time <= now and start_time >= window_30:
+            appointments_last_30_days += 1
+            if getattr(appt, "is_emergency", False):
+                emergencies_last_30_days += 1
+
+    created_at = getattr(row, "created_at", datetime.now(UTC)).replace(tzinfo=UTC)
+
+    return BusinessUsageResponse(
+        id=row.id,
+        name=row.name,
+        api_key=row.api_key,
+        calendar_id=getattr(row, "calendar_id", None),
+        status=getattr(row, "status", "ACTIVE"),
+        owner_phone=getattr(row, "owner_phone", None),
+        emergency_keywords=getattr(row, "emergency_keywords", None),
+        default_reminder_hours=getattr(row, "default_reminder_hours", None),
+        service_duration_config=getattr(row, "service_duration_config", None),
+        created_at=created_at,
+        total_customers=total_customers,
+        sms_opt_out_customers=sms_opt_out_customers,
+        total_appointments=total_appointments,
+        emergency_appointments=emergency_appointments,
+        appointments_last_7_days=appointments_last_7_days,
+        appointments_last_30_days=appointments_last_30_days,
+        emergencies_last_7_days=emergencies_last_7_days,
+        emergencies_last_30_days=emergencies_last_30_days,
+        sms_owner_messages=sms_owner_messages,
+        sms_customer_messages=sms_customer_messages,
+        sms_total_messages=sms_total_messages,
+        total_conversations=total_conversations,
+        flagged_conversations=flagged_conversations,
+        emergency_conversations=emergency_conversations,
+        service_type_counts=service_type_counts,
+        emergency_service_type_counts=emergency_service_type_counts,
+        pending_reschedules=pending_reschedules,
+    )
+
+
+@router.get("/businesses/{business_id}/usage", response_model=BusinessUsageResponse)
+def get_business_usage(business_id: str) -> BusinessUsageResponse:
+    """Return per-tenant usage stats (customers, appointments, emergencies)."""
+    session = _get_db_session()
+    try:
+        row = session.get(Business, business_id)
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Business not found",
+            )
+        return _build_business_usage(business_id, row)
+    finally:
+        session.close()
+
+
+@router.get("/businesses/usage", response_model=list[BusinessUsageResponse])
+def list_business_usage() -> list[BusinessUsageResponse]:
+    """List usage stats for all known tenants."""
+    session = _get_db_session()
+    try:
+        rows = session.query(Business).all()
+        return [_build_business_usage(b.id, b) for b in rows]
+    finally:
+        session.close()
+
+
+@router.get(
+    "/businesses/{business_id}/technicians",
+    response_model=list[TechnicianResponse],
+)
+def list_business_technicians(business_id: str) -> list[TechnicianResponse]:
+    """List technicians for a given business (tenant)."""
+    session = _get_db_session()
+    try:
+        rows = (
+            session.query(TechnicianDB)
+            .filter(TechnicianDB.business_id == business_id)
+            .order_by(TechnicianDB.created_at.asc())
+            .all()
+        )
+        return [_technician_to_response(r) for r in rows]
+    finally:
+        session.close()
+
+
+@router.post(
+    "/businesses/{business_id}/technicians",
+    response_model=TechnicianResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_business_technician(
+    business_id: str,
+    payload: TechnicianCreateRequest,
+) -> TechnicianResponse:
+    """Create a technician for the specified business."""
+    session = _get_db_session()
+    try:
+        business = session.get(Business, business_id)
+        if business is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Business not found",
+            )
+        tech_id = secrets.token_hex(8)
+        now = datetime.now(UTC)
+        row = TechnicianDB(  # type: ignore[arg-type]
+            id=tech_id,
+            business_id=business_id,
+            name=payload.name,
+            color=payload.color,
+            is_active=True,
+            created_at=now,
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return _technician_to_response(row)
+    finally:
+        session.close()
+
+
+@router.patch(
+    "/businesses/{business_id}/technicians/{technician_id}",
+    response_model=TechnicianResponse,
+)
+def update_business_technician(
+    business_id: str,
+    technician_id: str,
+    payload: TechnicianUpdateRequest,
+) -> TechnicianResponse:
+    """Update an existing technician for a business."""
+    session = _get_db_session()
+    try:
+        row = (
+            session.query(TechnicianDB)
+            .filter(
+                TechnicianDB.id == technician_id,
+                TechnicianDB.business_id == business_id,
+            )
+            .one_or_none()
+        )
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Technician not found",
+            )
+        if payload.name is not None:
+            row.name = payload.name
+        if payload.color is not None:
+            row.color = payload.color
+        if payload.is_active is not None:
+            row.is_active = payload.is_active
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return _technician_to_response(row)
+    finally:
+        session.close()
+
+
+@router.get("/twilio/health", response_model=TwilioHealthResponse)
+def twilio_health() -> TwilioHealthResponse:
+    """Return Twilio/webhook configuration and basic usage stats."""
+    settings = get_settings()
+    sms_cfg = settings.sms
+
+    cfg = TwilioConfigStatus(
+        provider=sms_cfg.provider,
+        from_number_set=bool(sms_cfg.from_number),
+        owner_number_set=bool(sms_cfg.owner_number),
+        account_sid_set=bool(sms_cfg.twilio_account_sid),
+        auth_token_set=bool(sms_cfg.twilio_auth_token),
+        verify_signatures=bool(getattr(sms_cfg, "verify_twilio_signatures", False)),
+    )
+
+    per_business: list[TwilioBusinessHealth] = []
+    for business_id, stats in metrics.twilio_by_business.items():
+        per_business.append(
+            TwilioBusinessHealth(
+                business_id=business_id,
+                voice_requests=stats.voice_requests,
+                sms_requests=stats.sms_requests,
+                voice_errors=stats.voice_errors,
+                sms_errors=stats.sms_errors,
+            )
+        )
+
+    return TwilioHealthResponse(
+        config=cfg,
+        twilio_voice_requests=metrics.twilio_voice_requests,
+        twilio_voice_errors=metrics.twilio_voice_errors,
+        twilio_sms_requests=metrics.twilio_sms_requests,
+        twilio_sms_errors=metrics.twilio_sms_errors,
+        per_business=per_business,
+    )
+
+
+@router.post("/retention/prune", response_model=RetentionPruneResponse)
+def prune_retention() -> RetentionPruneResponse:
+    """Prune old appointments and conversations based on per-tenant retention.
+
+    This endpoint is intended to be called by an operator or scheduled job
+    in environments where database support is available.
+    """
+    session = _get_db_session()
+    try:
+        now = datetime.now(UTC)
+        appointments_deleted = 0
+        conversations_deleted = 0
+        messages_deleted = 0
+
+        businesses = session.query(Business).all()
+        for row in businesses:
+            appt_ret = getattr(row, "appointment_retention_days", None)
+            if appt_ret is not None and appt_ret > 0:
+                cutoff = now - timedelta(days=appt_ret)
+                result = (
+                    session.query(AppointmentDB)
+                    .filter(
+                        AppointmentDB.business_id == row.id,
+                        AppointmentDB.start_time < cutoff,
+                    )
+                    .delete(synchronize_session=False)
+                )
+                appointments_deleted += int(result or 0)
+
+            conv_ret = getattr(row, "conversation_retention_days", None)
+            if conv_ret is not None and conv_ret > 0:
+                cutoff = now - timedelta(days=conv_ret)
+                old_convs = (
+                    session.query(ConversationDB)
+                    .filter(
+                        ConversationDB.business_id == row.id,
+                        ConversationDB.created_at < cutoff,
+                    )
+                    .all()
+                )
+                conv_ids = [c.id for c in old_convs]
+                if conv_ids:
+                    msg_result = (
+                        session.query(ConversationMessageDB)
+                        .filter(ConversationMessageDB.conversation_id.in_(conv_ids))
+                        .delete(synchronize_session=False)
+                    )
+                    conv_result = (
+                        session.query(ConversationDB)
+                        .filter(ConversationDB.id.in_(conv_ids))
+                        .delete(synchronize_session=False)
+                    )
+                    messages_deleted += int(msg_result or 0)
+                    conversations_deleted += int(conv_result or 0)
+
+        session.commit()
+        return RetentionPruneResponse(
+            appointments_deleted=appointments_deleted,
+            conversations_deleted=conversations_deleted,
+            conversation_messages_deleted=messages_deleted,
+        )
+    finally:
+        session.close()
+
+
+@router.get("/businesses/usage.csv", response_class=Response)
+def download_business_usage_csv() -> Response:
+    """Download per-tenant usage stats as CSV.
+
+    This exposes non-sensitive fields (no API keys) for external analysis.
+    """
+    session = _get_db_session()
+    try:
+        rows = session.query(Business).all()
+        usages = [_build_business_usage(b.id, b) for b in rows]
+    finally:
+        session.close()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "id",
+            "name",
+            "calendar_id",
+            "total_customers",
+            "sms_opt_out_customers",
+            "total_appointments",
+            "emergency_appointments",
+            "appointments_last_7_days",
+            "appointments_last_30_days",
+            "emergencies_last_7_days",
+            "emergencies_last_30_days",
+            "sms_owner_messages",
+            "sms_customer_messages",
+            "sms_total_messages",
+            "total_conversations",
+            "flagged_conversations",
+            "emergency_conversations",
+            "pending_reschedules",
+        ]
+    )
+    for u in usages:
+        writer.writerow(
+            [
+                u.id,
+                u.name,
+                u.calendar_id or "",
+                u.total_customers,
+                u.sms_opt_out_customers,
+                u.total_appointments,
+                u.emergency_appointments,
+                u.appointments_last_7_days,
+                u.appointments_last_30_days,
+                u.emergencies_last_7_days,
+                u.emergencies_last_30_days,
+                u.sms_owner_messages,
+                u.sms_customer_messages,
+                u.sms_total_messages,
+                u.total_conversations,
+                u.flagged_conversations,
+                u.emergency_conversations,
+                u.pending_reschedules,
+            ]
+        )
+
+    csv_bytes = output.getvalue().encode("utf-8")
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="business_usage.csv"'},
+    )
+
+
+@router.get("/environment", response_model=AdminEnvironmentResponse)
+def get_admin_environment() -> AdminEnvironmentResponse:
+    """Return a simple environment label for the admin dashboard.
+
+    This reads the ENVIRONMENT environment variable (defaulting to "dev") so
+    platform operators can see whether they are on dev, staging, or prod.
+    """
+    env = os.getenv("ENVIRONMENT", "dev")
+    return AdminEnvironmentResponse(environment=env)
+
+
+@router.get("/governance", response_model=GovernanceSummaryResponse)
+def get_governance_summary() -> GovernanceSummaryResponse:
+    """Return a high-level governance/security summary for the platform.
+
+    This endpoint is admin-scoped and is intended for quick checks of
+    multi-tenant posture, retention settings, and key security toggles.
+    """
+    settings = get_settings()
+    multi_tenant = False
+    business_count = 0
+    tenants: list[GovernanceTenantSummary] = []
+
+    if SQLALCHEMY_AVAILABLE and SessionLocal is not None:
+        session = SessionLocal()
+        try:
+            rows = session.query(Business).order_by(Business.id.asc()).all()
+            business_count = len(rows)
+            multi_tenant = business_count > 1
+            for row in rows:
+                tenants.append(
+                    GovernanceTenantSummary(
+                        id=row.id,
+                        name=row.name,
+                        status=getattr(row, "status", "ACTIVE"),
+                        language_code=getattr(row, "language_code", None),
+                        appointment_retention_days=getattr(
+                            row, "appointment_retention_days", None
+                        ),
+                        conversation_retention_days=getattr(
+                            row, "conversation_retention_days", None
+                        ),
+                        max_jobs_per_day=getattr(row, "max_jobs_per_day", None),
+                        reserve_mornings_for_emergencies=getattr(
+                            row, "reserve_mornings_for_emergencies", None
+                        ),
+                        travel_buffer_minutes=getattr(
+                            row, "travel_buffer_minutes", None
+                        ),
+                        twilio_missed_statuses=getattr(
+                            row, "twilio_missed_statuses", None
+                        ),
+                    )
+                )
+        finally:
+            session.close()
+
+    return GovernanceSummaryResponse(
+        multi_tenant_mode=multi_tenant,
+        business_count=business_count,
+        require_business_api_key=bool(settings.require_business_api_key),
+        verify_twilio_signatures=bool(
+            getattr(settings.sms, "verify_twilio_signatures", False)
+        ),
+        tenants=tenants,
+    )
+
+
+@router.get("/audit", response_model=list[AuditEvent])
+def list_audit_events(
+    business_id: str | None = None,
+    actor_type: str | None = None,
+    since_minutes: int | None = None,
+    limit: int = 100,
+) -> list[AuditEvent]:
+    """Return recent audit events for platform governance.
+
+    This endpoint is intentionally simple and primarily intended for the
+    admin dashboard. It supports coarse filtering by tenant, actor role,
+    and a sliding time window.
+    """
+    if not SQLALCHEMY_AVAILABLE or SessionLocal is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database support is not available",
+        )
+
+    # Clamp limit to a reasonable range to avoid unbounded scans.
+    if limit <= 0:
+        limit = 100
+    limit = min(limit, 500)
+
+    session = SessionLocal()
+    try:
+        query = session.query(AuditEventDB).order_by(AuditEventDB.id.desc())
+        if business_id:
+            query = query.filter(AuditEventDB.business_id == business_id)
+        if actor_type:
+            query = query.filter(AuditEventDB.actor_type == actor_type)
+        if since_minutes is not None and since_minutes > 0:
+            cutoff = datetime.now(UTC) - timedelta(minutes=since_minutes)
+            query = query.filter(AuditEventDB.created_at >= cutoff)
+
+        rows = query.limit(limit).all()
+        events: list[AuditEvent] = []
+        for row in rows:
+            created_at = getattr(row, "created_at", datetime.now(UTC)).replace(
+                tzinfo=UTC
+            )
+            events.append(
+                AuditEvent(
+                    id=row.id,
+                    created_at=created_at,
+                    actor_type=row.actor_type,
+                    business_id=getattr(row, "business_id", None),
+                    path=row.path,
+                    method=row.method,
+                    status_code=row.status_code,
+                )
+            )
+        return events
+    finally:
+        session.close()

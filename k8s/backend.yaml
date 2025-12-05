@@ -1,0 +1,176 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-telephony-backend-config
+data:
+  # Non-secret application settings. Override these per environment as needed.
+  GOOGLE_CALENDAR_ID: "primary"
+  CALENDAR_USE_STUB: "true"
+  REQUIRE_BUSINESS_API_KEY: "true"
+  SESSION_STORE_BACKEND: "memory"
+  DEFAULT_LANGUAGE_CODE: "en"
+  SMS_PROVIDER: "twilio"
+  VERIFY_TWILIO_SIGNATURES: "true"
+  # Path where the Google Calendar credentials JSON is mounted in the container.
+  GOOGLE_CALENDAR_CREDENTIALS_FILE: "/secrets/google-calendar.json"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ai-telephony-backend-secrets
+type: Opaque
+stringData:
+  # Replace the placeholder values below before applying in a real environment.
+  DATABASE_URL: "postgresql+psycopg2://USER:PASSWORD@HOST:5432/DBNAME"
+  ADMIN_API_KEY: "REPLACE_WITH_STRONG_ADMIN_KEY"
+  OWNER_DASHBOARD_TOKEN: "REPLACE_WITH_OWNER_DASHBOARD_TOKEN"
+  TWILIO_ACCOUNT_SID: "REPLACE_WITH_TWILIO_ACCOUNT_SID"
+  TWILIO_AUTH_TOKEN: "REPLACE_WITH_TWILIO_AUTH_TOKEN"
+  SMS_FROM_NUMBER: "+1XXXXXXXXXX"
+  SMS_OWNER_NUMBER: "+1XXXXXXXXXX"
+  OPENAI_API_KEY: "REPLACE_WITH_OPENAI_API_KEY_OR_REMOVE"
+  # Paste the Google service account JSON used for Calendar access here.
+  # In production, prefer creating this secret via kubectl or your CI/CD system.
+  google-calendar.json: |
+    {
+      "type": "service_account",
+      "project_id": "REPLACE_ME",
+      "private_key_id": "REPLACE_ME",
+      "private_key": "-----BEGIN PRIVATE KEY-----\nREPLACE_ME\n-----END PRIVATE KEY-----\n",
+      "client_email": "REPLACE_ME@REPLACE_ME.iam.gserviceaccount.com",
+      "client_id": "REPLACE_ME",
+      "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+      "token_uri": "https://oauth2.googleapis.com/token",
+      "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+      "client_x509_cert_url": "REPLACE_ME"
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-telephony-backend
+  labels:
+    app: ai-telephony-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ai-telephony-backend
+  template:
+    metadata:
+      labels:
+        app: ai-telephony-backend
+    spec:
+      containers:
+        - name: backend
+          # Replace this with the image path in your registry (Artifact Registry or another registry).
+          image: REPLACE_WITH_REGISTRY/ai-telephony-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: ai-telephony-backend-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-telephony-backend-secrets
+                  key: DATABASE_URL
+            - name: ADMIN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-telephony-backend-secrets
+                  key: ADMIN_API_KEY
+            - name: OWNER_DASHBOARD_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ai-telephony-backend-secrets
+                  key: OWNER_DASHBOARD_TOKEN
+            - name: TWILIO_ACCOUNT_SID
+              valueFrom:
+                secretKeyRef:
+                  name: ai-telephony-backend-secrets
+                  key: TWILIO_ACCOUNT_SID
+            - name: TWILIO_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ai-telephony-backend-secrets
+                  key: TWILIO_AUTH_TOKEN
+            - name: SMS_FROM_NUMBER
+              valueFrom:
+                secretKeyRef:
+                  name: ai-telephony-backend-secrets
+                  key: SMS_FROM_NUMBER
+            - name: SMS_OWNER_NUMBER
+              valueFrom:
+                secretKeyRef:
+                  name: ai-telephony-backend-secrets
+                  key: SMS_OWNER_NUMBER
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-telephony-backend-secrets
+                  key: OPENAI_API_KEY
+          volumeMounts:
+            - name: google-calendar-credentials
+              mountPath: /secrets
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: google-calendar-credentials
+          secret:
+            secretName: ai-telephony-backend-secrets
+            items:
+              - key: google-calendar.json
+                path: google-calendar.json
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-telephony-backend
+  labels:
+    app: ai-telephony-backend
+spec:
+  type: LoadBalancer
+  selector:
+    app: ai-telephony-backend
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai-telephony-backend-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai-telephony-backend
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+

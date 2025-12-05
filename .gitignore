@@ -1,0 +1,18 @@
+.env
+
+# Python environments and caches
+.venv/
+*/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE/editor files
+.vscode/
+.idea/
+
+# Local databases and secrets
+backend/app.db
+secrets/

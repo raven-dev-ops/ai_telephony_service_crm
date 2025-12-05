@@ -1,0 +1,1080 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AI Telephony Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        color: #1a202c;
+      }
+      
+      .header-bar {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        padding: 1rem 2rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+      }
+      
+      .header-content {
+        max-width: 1400px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+      }
+      
+      .logo-section {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+      }
+      
+      .logo {
+        width: 48px;
+        height: 48px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+      }
+      
+      .logo svg {
+        width: 28px;
+        height: 28px;
+        fill: white;
+      }
+      
+      h1 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      
+      .status-bar {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+        margin-left: auto;
+        flex-wrap: wrap;
+      }
+      
+      .status-badge {
+        padding: 0.4rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+      }
+      
+      .status-badge.success {
+        background: #d4edda;
+        color: #155724;
+      }
+      
+      .status-badge.error {
+        background: #f8d7da;
+        color: #721c24;
+      }
+      
+      .status-badge.muted {
+        background: #e2e8f0;
+        color: #64748b;
+      }
+      
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+        animation: pulse 2s infinite;
+      }
+      
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+      
+      .controls {
+        display: flex;
+        gap: 0.5rem;
+      }
+      
+      button {
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        border: none;
+        background: #667eea;
+        color: white;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.875rem;
+      }
+      
+      button:hover {
+        background: #5568d3;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+      }
+      
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
+      
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 2rem;
+      }
+      
+      .dashboard-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 1.5rem;
+        margin-top: 1.5rem;
+      }
+      
+      .card {
+        background: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+        transition: all 0.3s;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+      }
+      
+      .card:hover {
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+        transform: translateY(-2px);
+      }
+      
+      .card-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 2px solid #f7fafc;
+      }
+      
+      .card-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      }
+      
+      .card-icon svg {
+        width: 20px;
+        height: 20px;
+        fill: white;
+      }
+      
+      .card h2 {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: #2d3748;
+        flex: 1;
+      }
+      
+      .metric-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid #f7fafc;
+      }
+      
+      .metric-row:last-child {
+        border-bottom: none;
+      }
+      
+      .metric-label {
+        font-size: 0.875rem;
+        color: #64748b;
+        font-weight: 500;
+      }
+      
+      .metric-value {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1a202c;
+      }
+      
+      .metric-value.large {
+        font-size: 2rem;
+      }
+      
+      .pill {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        background: #e2e8f0;
+        color: #475569;
+        margin: 0.25rem;
+      }
+      
+      .tag {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        border-radius: 6px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+      }
+      
+      .tag-emergency {
+        background: #fee;
+        color: #c00;
+      }
+      
+      .tag-normal {
+        background: #e3f2fd;
+        color: #1565c0;
+      }
+      
+      .empty-state {
+        text-align: center;
+        padding: 2rem;
+        color: #94a3b8;
+      }
+      
+      .empty-state svg {
+        width: 64px;
+        height: 64px;
+        fill: #cbd5e1;
+        margin-bottom: 1rem;
+      }
+      
+      input[type="text"],
+      input[type="password"],
+      input[type="date"],
+      select,
+      textarea {
+        padding: 0.5rem;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        font-family: inherit;
+        font-size: 0.875rem;
+        transition: all 0.2s;
+      }
+      
+      input:focus,
+      select:focus,
+      textarea:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      }
+
+      .form-group {
+        margin-bottom: 1rem;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 0.5rem;
+      }
+
+      label small {
+        font-weight: 600;
+        color: #475569;
+      }
+      
+      .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 1rem;
+      }
+      
+      .kpi-card {
+        text-align: center;
+        padding: 1rem;
+        background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+        border-radius: 12px;
+      }
+      
+      .kpi-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #667eea;
+        margin-bottom: 0.25rem;
+      }
+      
+      .kpi-label {
+        font-size: 0.75rem;
+        color: #64748b;
+        font-weight: 600;
+      }
+      
+      body.dark {
+        background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
+        color: #e2e8f0;
+      }
+      
+      body.dark .header-bar {
+        background: rgba(26, 32, 44, 0.95);
+        border-bottom-color: rgba(255, 255, 255, 0.1);
+      }
+      
+      body.dark .card {
+        background: #2d3748;
+        border-color: rgba(255, 255, 255, 0.1);
+      }
+      
+      body.dark .card h2 {
+        color: #e2e8f0;
+      }
+      
+      body.dark .metric-label {
+        color: #a0aec0;
+      }
+      
+      body.dark .metric-value {
+        color: #e2e8f0;
+      }
+      
+      body.dark input,
+      body.dark select,
+      body.dark textarea {
+        background: #1a202c;
+        border-color: #4a5568;
+        color: #e2e8f0;
+      }
+      
+      .loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        color: #94a3b8;
+      }
+      
+      .loading::after {
+        content: "";
+        width: 20px;
+        height: 20px;
+        border: 3px solid #e2e8f0;
+        border-top-color: #667eea;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin-left: 0.5rem;
+      }
+      
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin: 1rem 0;
+      }
+      
+      .feature-item {
+        display: flex;
+        align-items: start;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        background: #f8fafc;
+        border-radius: 8px;
+      }
+      
+      body.dark .feature-item {
+        background: #1a202c;
+      }
+      
+      .feature-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      
+      .feature-icon svg {
+        width: 16px;
+        height: 16px;
+        fill: white;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Header -->
+    <div class="header-bar">
+      <div class="header-content">
+        <div class="logo-section">
+          <div class="logo">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M20 15.5c-1.25 0-2.45-.2-3.57-.57-.35-.11-.74-.03-1.02.24l-2.2 2.2c-2.83-1.44-5.15-3.75-6.59-6.59l2.2-2.21c.28-.26.36-.65.25-1C8.7 6.45 8.5 5.25 8.5 4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1 0 9.39 7.61 17 17 17 .55 0 1-.45 1-1v-3.5c0-.55-.45-1-1-1z"/>
+            </svg>
+          </div>
+          <div>
+            <h1>AI Telephony Dashboard</h1>
+            <div style="font-size: 0.75rem; color: #64748b;">Owner Command Center</div>
+          </div>
+        </div>
+        <div class="status-bar">
+          <div id="connection-status" class="status-badge muted">
+            <span class="status-dot"></span>
+            <span>Connecting...</span>
+          </div>
+          <div class="controls">
+            <button id="theme-toggle" type="button">🌙 Dark</button>
+            <button id="refresh-all" type="button">↻ Refresh</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="container">
+      <!-- Owner Authentication -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+            </svg>
+          </div>
+          <h2>Owner Authentication</h2>
+        </div>
+        <div class="form-group">
+          <label>
+            <small>Tenant API Key (X-API-Key)</small>
+            <input id="owner-api-key-input" type="password" placeholder="Enter your tenant API key" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label>
+            <small>Owner Token (X-Owner-Token)</small>
+            <input id="owner-token-input" type="password" placeholder="Enter your owner dashboard token" />
+          </label>
+        </div>
+        <small id="owner-auth-status" class="muted"></small>
+      </div>
+
+      <!-- Quick Stats -->
+      <div class="dashboard-grid">
+        <!-- KPI Overview -->
+        <div class="card" style="grid-column: span 2;">
+          <div class="card-header">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+              </svg>
+            </div>
+            <h2>Key Performance Indicators</h2>
+          </div>
+          <div class="kpi-grid" id="owner-kpis-content">
+            <div class="loading">Loading KPIs</div>
+          </div>
+          <button id="refresh-owner-kpis" type="button" style="margin-top: 1rem; width: 100%;">Refresh KPIs</button>
+        </div>
+
+        <!-- Today's Summary -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z"/>
+              </svg>
+            </div>
+            <h2>Today's Jobs</h2>
+          </div>
+          <div id="today-summary-content">
+            <div class="loading">Loading</div>
+          </div>
+          <button id="refresh-today-summary" type="button" style="margin-top: 1rem; width: 100%;">Refresh</button>
+        </div>
+
+        <!-- Tomorrow's Schedule -->
+        <div class="card" style="grid-column: span 2;">
+          <div class="card-header">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
+              </svg>
+            </div>
+            <h2>Tomorrow's Schedule</h2>
+          </div>
+          <p id="schedule-summary" style="margin-bottom: 1rem; color: #64748b;">Loading schedule...</p>
+          <div id="schedule-list"></div>
+          <button id="refresh-schedule" type="button" style="margin-top: 1rem; width: 100%;">Refresh Schedule</button>
+        </div>
+
+        <!-- Emergency Jobs -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+              </svg>
+            </div>
+            <h2>Emergency Jobs</h2>
+          </div>
+          <div id="emergency-content">
+            <div class="loading">Loading</div>
+          </div>
+          <button id="refresh-emergencies" type="button" style="margin-top: 1rem; width: 100%;">Refresh</button>
+        </div>
+
+        <!-- Analytics -->
+        <div class="card" style="grid-column: span 2;">
+          <div class="card-header">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+              </svg>
+            </div>
+            <h2>Analytics Overview</h2>
+          </div>
+          <div id="analytics-content">
+            <div class="loading">Loading</div>
+          </div>
+          <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+            <button id="refresh-analytics" type="button" style="flex: 1;">Refresh</button>
+            <button id="download-service-mix" type="button" style="flex: 1;">Download CSV</button>
+          </div>
+        </div>
+
+        <!-- Conversations -->
+        <div class="card" style="grid-column: span 2;">
+          <div class="card-header">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>
+              </svg>
+            </div>
+            <h2>Recent Conversations</h2>
+          </div>
+          <div id="conversations-list">
+            <div class="loading">Loading</div>
+          </div>
+          <div id="conversation-detail" style="margin-top: 1rem;"></div>
+          <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+            <button id="refresh-conversations" type="button" style="flex: 1;">Refresh</button>
+            <button id="download-conversations" type="button" style="flex: 1;">Download CSV</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      const DEFAULT_BACKEND_BASE = "http://localhost:8000";
+      const backendBase = DEFAULT_BACKEND_BASE;
+      let apiKey = localStorage.getItem("owner_api_key") || "";
+      let ownerToken = localStorage.getItem("owner_owner_token") || "";
+
+      function updateConnectionStatus(state) {
+        const el = document.getElementById("connection-status");
+        if (!el) return;
+        
+        const dot = el.querySelector(".status-dot");
+        const text = el.querySelector("span:last-child");
+        
+        if (state === "ok") {
+          el.className = "status-badge success";
+          text.textContent = "Connected";
+        } else if (state === "error") {
+          el.className = "status-badge error";
+          text.textContent = "Connection Error";
+        } else {
+          el.className = "status-badge muted";
+          text.textContent = "Connecting...";
+        }
+      }
+
+      function authHeaders() {
+        const headers = {};
+        if (apiKey) headers["X-API-Key"] = apiKey;
+        if (ownerToken) headers["X-Owner-Token"] = ownerToken;
+        return headers;
+      }
+
+      async function fetchJson(path) {
+        try {
+          const res = await fetch(backendBase + path, { headers: authHeaders() });
+          if (!res.ok) {
+            updateConnectionStatus("error");
+            throw new Error("Request failed: " + res.status);
+          }
+          updateConnectionStatus("ok");
+          return res.json();
+        } catch (err) {
+          updateConnectionStatus("error");
+          throw err;
+        }
+      }
+
+      function escapeHtml(value) {
+        if (value === null || value === undefined) return "";
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function formatPercent(value) {
+        if (value === null || value === undefined || isNaN(value)) {
+          return "0%";
+        }
+        const pct = Math.round(Number(value) * 100);
+        return `${pct}%`;
+      }
+
+      function formatMinutes(value) {
+        if (value === null || value === undefined || isNaN(value)) {
+          return "0m";
+        }
+        const minutes = Math.max(0, Math.round(Number(value)));
+        if (minutes < 60) {
+          return `${minutes}m`;
+        }
+        const hours = Math.floor(minutes / 60);
+        const rem = minutes % 60;
+        return rem ? `${hours}h ${rem}m` : `${hours}h`;
+      }
+
+      async function loadOwnerKpis() {
+        const el = document.getElementById("owner-kpis-content");
+        if (!el) return;
+        el.innerHTML = '<div class="loading">Loading KPIs</div>';
+
+        try {
+          const [customers, sms, ttb, funnel, completeness] = await Promise.all([
+            fetchJson("/v1/owner/customers/analytics?days=365"),
+            fetchJson("/v1/owner/sms-metrics"),
+            fetchJson("/v1/owner/time-to-book?days=90"),
+            fetchJson("/v1/owner/conversion-funnel?days=90"),
+            fetchJson("/v1/owner/data-completeness?days=365"),
+          ]);
+
+          const kpis = [];
+
+          const convRate = funnel && typeof funnel.overall_conversion_rate === "number"
+            ? funnel.overall_conversion_rate
+            : null;
+          if (convRate !== null) {
+            kpis.push({ label: "Conversion", value: formatPercent(convRate) });
+          }
+
+          const avgMinutes = ttb && typeof ttb.overall_average_minutes === "number"
+            ? ttb.overall_average_minutes
+            : null;
+          if (avgMinutes !== null) {
+            kpis.push({ label: "Avg Time to Book", value: formatMinutes(avgMinutes) });
+          }
+
+          const repeatShare = customers && customers.economics && typeof customers.economics.repeat_customer_share === "number"
+            ? customers.economics.repeat_customer_share
+            : null;
+          if (repeatShare !== null) {
+            kpis.push({ label: "Repeat Work", value: formatPercent(repeatShare) });
+          }
+
+          const smsShare = sms && typeof sms.confirmation_share_via_sms === "number"
+            ? sms.confirmation_share_via_sms
+            : null;
+          if (smsShare !== null) {
+            kpis.push({ label: "SMS Confirms", value: formatPercent(smsShare) });
+          }
+
+          const completenessScore = completeness && typeof completeness.appointment_completeness_score === "number"
+            ? completeness.appointment_completeness_score
+            : null;
+          if (completenessScore !== null) {
+            kpis.push({ label: "Data Complete", value: formatPercent(completenessScore) });
+          }
+
+          if (!kpis.length) {
+            el.innerHTML = '<div class="empty-state">No KPI data yet</div>';
+            return;
+          }
+
+          el.innerHTML = kpis.map(kpi => `
+            <div class="kpi-card">
+              <div class="kpi-value">${escapeHtml(kpi.value)}</div>
+              <div class="kpi-label">${escapeHtml(kpi.label)}</div>
+            </div>
+          `).join("");
+        } catch (err) {
+          el.innerHTML = '<div class="empty-state">Unable to load KPIs</div>';
+        }
+      }
+
+      async function loadTodaySummary() {
+        const el = document.getElementById("today-summary-content");
+        if (!el) return;
+        el.innerHTML = '<div class="loading">Loading</div>';
+        
+        try {
+          const data = await fetchJson("/v1/owner/summary/today");
+          const total = data?.total_appointments ?? 0;
+          const emergency = data?.emergency_appointments ?? 0;
+          const standard = data?.standard_appointments ?? 0;
+
+          el.innerHTML = `
+            <div class="metric-row">
+              <span class="metric-label">Total Jobs</span>
+              <span class="metric-value">${escapeHtml(total)}</span>
+            </div>
+            <div class="metric-row">
+              <span class="metric-label">Emergency</span>
+              <span class="metric-value" style="color: #ef4444;">${escapeHtml(emergency)}</span>
+            </div>
+            <div class="metric-row">
+              <span class="metric-label">Standard</span>
+              <span class="metric-value">${escapeHtml(standard)}</span>
+            </div>
+          `;
+        } catch (err) {
+          el.innerHTML = '<div class="empty-state">Unable to load summary</div>';
+        }
+      }
+
+      async function loadSchedule() {
+        const summaryEl = document.getElementById("schedule-summary");
+        const listEl = document.getElementById("schedule-list");
+        if (!summaryEl || !listEl) return;
+        
+        summaryEl.textContent = "Loading...";
+        listEl.innerHTML = "";
+        
+        try {
+          const data = await fetchJson("/v1/owner/schedule/tomorrow");
+          const appointments = Array.isArray(data?.appointments) ? data.appointments : [];
+
+          summaryEl.textContent = data?.reply_text || `You have ${appointments.length} appointments scheduled for tomorrow.`;
+
+          if (!appointments.length) {
+            listEl.innerHTML = '<div class="empty-state">No appointments scheduled for tomorrow</div>';
+            return;
+          }
+
+          listEl.innerHTML = appointments.map(apt => {
+            const start = apt.start_time ? new Date(apt.start_time) : null;
+            const timeLabel = start && !isNaN(start.getTime())
+              ? start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+              : "";
+            const tag = apt.is_emergency ? "emergency" : "normal";
+            return `
+              <div class="metric-row">
+                <div>
+                  <div style="font-weight: 600;">${escapeHtml(apt.customer_name || "Customer")}</div>
+                  <div style="font-size: 0.875rem; color: #64748b;">${escapeHtml(timeLabel)}</div>
+                </div>
+                <span class="tag tag-${tag}">${tag}</span>
+              </div>
+            `;
+          }).join("");
+        } catch (err) {
+          summaryEl.textContent = "Unable to load schedule";
+        }
+      }
+
+      async function loadEmergencyJobs() {
+        const el = document.getElementById("emergency-content");
+        if (!el) return;
+        el.innerHTML = '<div class="loading">Loading</div>';
+        
+        try {
+          const [today, week, month] = await Promise.all([
+            fetchJson("/v1/owner/service-mix?days=1"),
+            fetchJson("/v1/owner/service-mix?days=7"),
+            fetchJson("/v1/owner/service-mix?days=30"),
+          ]);
+
+          const todayEmerg = today?.emergency_appointments_30d ?? 0;
+          const weekEmerg = week?.emergency_appointments_30d ?? 0;
+          const monthEmerg = month?.emergency_appointments_30d ?? 0;
+
+          el.innerHTML = `
+            <div class="metric-row">
+              <span class="metric-label">Today</span>
+              <span class="metric-value">${escapeHtml(todayEmerg)}</span>
+            </div>
+            <div class="metric-row">
+              <span class="metric-label">Last 7 Days</span>
+              <span class="metric-value">${escapeHtml(weekEmerg)}</span>
+            </div>
+            <div class="metric-row">
+              <span class="metric-label">Last 30 Days</span>
+              <span class="metric-value">${escapeHtml(monthEmerg)}</span>
+            </div>
+          `;
+        } catch (err) {
+          el.innerHTML = '<div class="empty-state">Unable to load emergency data</div>';
+        }
+      }
+
+      async function loadAnalytics() {
+        const el = document.getElementById("analytics-content");
+        if (!el) return;
+        el.innerHTML = '<div class="loading">Loading</div>';
+
+        try {
+          const [mix, customers, funnel] = await Promise.all([
+            fetchJson("/v1/owner/service-mix?days=30"),
+            fetchJson("/v1/owner/customers/analytics?days=365"),
+            fetchJson("/v1/owner/conversion-funnel?days=90"),
+          ]);
+
+          const total30 = mix?.total_appointments_30d ?? 0;
+          const emergency30 = mix?.emergency_appointments_30d ?? 0;
+          const emergencyShare = total30 > 0 ? emergency30 / total30 : 0;
+
+          const repeatShare = customers?.economics?.repeat_customer_share ?? 0;
+          const convRate = funnel?.overall_conversion_rate ?? 0;
+
+          el.innerHTML = `
+            <div class="feature-grid">
+              <div class="feature-item">
+                <div class="feature-icon">
+                  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path fill="white" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+                  </svg>
+                </div>
+                <div>
+                  <div style="font-weight: 600;">${escapeHtml(total30)}</div>
+                  <div style="font-size: 0.75rem; color: #64748b;">Appointments (Last 30 Days)</div>
+                </div>
+              </div>
+              <div class="feature-item">
+                <div class="feature-icon">
+                  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path fill="white" d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+                  </svg>
+                </div>
+                <div>
+                  <div style="font-weight: 600;">${escapeHtml(formatPercent(emergencyShare))}</div>
+                  <div style="font-size: 0.75rem; color: #64748b;">Emergency Share (30 Days)</div>
+                </div>
+              </div>
+              <div class="feature-item">
+                <div class="feature-icon">
+                  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path fill="white" d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3zm0 15l-4-4 1.41-1.41L12 14.17l4.59-4.58L18 11l-6 6z"/>
+                  </svg>
+                </div>
+                <div>
+                  <div style="font-weight: 600;">${escapeHtml(formatPercent(repeatShare))}</div>
+                  <div style="font-size: 0.75rem; color: #64748b;">Repeat Work Share</div>
+                </div>
+              </div>
+              <div class="feature-item">
+                <div class="feature-icon">
+                  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path fill="white" d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3zm0 15l-4-4 1.41-1.41L12 14.17l4.59-4.58L18 11l-6 6z"/>
+                  </svg>
+                </div>
+                <div>
+                  <div style="font-weight: 600;">${escapeHtml(formatPercent(convRate))}</div>
+                  <div style="font-size: 0.75rem; color: #64748b;">Lead → Booked Conversion</div>
+                </div>
+              </div>
+            </div>
+          `;
+        } catch (err) {
+          el.innerHTML = '<div class="empty-state">Unable to load analytics</div>';
+        }
+      }
+
+      async function loadConversations() {
+        const listEl = document.getElementById("conversations-list");
+        const detailEl = document.getElementById("conversation-detail");
+        if (!listEl) return;
+        listEl.innerHTML = '<div class="loading">Loading</div>';
+        if (detailEl) detailEl.innerHTML = "";
+
+        try {
+          const data = await fetchJson("/v1/owner/conversations/review");
+          const items = Array.isArray(data?.items) ? data.items : [];
+
+          if (!items.length) {
+            listEl.innerHTML = '<div class="empty-state">No flagged or emergency conversations</div>';
+            return;
+          }
+
+          listEl.innerHTML = items.map(conv => `
+            <div class="metric-row" data-conversation-id="${escapeHtml(conv.id)}">
+              <div>
+                <div style="font-weight: 600;">${escapeHtml(conv.customer_name || "Unknown customer")}</div>
+                <div style="font-size: 0.75rem; color: #64748b;">
+                  ${escapeHtml(String(conv.channel || "").toUpperCase())}
+                </div>
+                <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+                  ${escapeHtml(conv.outcome || "")}
+                </div>
+              </div>
+            </div>
+          `).join("");
+
+          listEl.querySelectorAll(".metric-row").forEach(row => {
+            row.addEventListener("click", () => {
+              if (!detailEl) return;
+              const id = row.getAttribute("data-conversation-id") || "";
+              const conv = items.find(c => c.id === id);
+              if (!conv) return;
+              const created = conv.created_at ? new Date(conv.created_at) : null;
+              const createdLabel = created && !isNaN(created.getTime())
+                ? created.toLocaleString()
+                : "";
+              detailEl.innerHTML = `
+                <div style="padding-top: 1rem; border-top: 1px solid #f1f5f9;">
+                  <div style="font-weight: 600; margin-bottom: 0.25rem;">${escapeHtml(conv.customer_name || "Unknown customer")}</div>
+                  <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 0.25rem;">
+                    Channel: ${escapeHtml(conv.channel || "")}
+                  </div>
+                  <div style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.5rem;">
+                    Created: ${escapeHtml(createdLabel)}
+                  </div>
+                  <div style="font-size: 0.875rem; color: #4b5563;">${escapeHtml(conv.outcome || "")}</div>
+                </div>
+              `;
+            });
+          });
+        } catch (err) {
+          listEl.innerHTML = '<div class="empty-state">Unable to load conversations</div>';
+          if (detailEl) detailEl.innerHTML = "";
+        }
+      }
+
+      function initAuth() {
+        const apiInput = document.getElementById("owner-api-key-input");
+        const tokenInput = document.getElementById("owner-token-input");
+        const statusEl = document.getElementById("owner-auth-status");
+
+        if (apiInput) {
+          if (apiKey) apiInput.value = apiKey;
+          apiInput.addEventListener("change", (e) => {
+            apiKey = (e.target.value || "").trim();
+            if (apiKey) {
+              localStorage.setItem("owner_api_key", apiKey);
+              if (statusEl) {
+                statusEl.textContent = "API key saved";
+                statusEl.className = "success";
+              }
+            } else {
+              localStorage.removeItem("owner_api_key");
+              if (statusEl) {
+                statusEl.textContent = "API key cleared";
+                statusEl.className = "muted";
+              }
+            }
+          });
+        }
+
+        if (tokenInput) {
+          if (ownerToken) tokenInput.value = ownerToken;
+          tokenInput.addEventListener("change", (e) => {
+            ownerToken = (e.target.value || "").trim();
+            if (ownerToken) {
+              localStorage.setItem("owner_owner_token", ownerToken);
+              if (statusEl) {
+                statusEl.textContent = "Owner token saved";
+                statusEl.className = "success";
+              }
+            } else {
+              localStorage.removeItem("owner_owner_token");
+              if (statusEl) {
+                statusEl.textContent = "Owner token cleared";
+                statusEl.className = "muted";
+              }
+            }
+          });
+        }
+      }
+
+      function initThemeToggle() {
+        const themeToggle = document.getElementById("theme-toggle");
+        const storedTheme = localStorage.getItem("owner_theme") || "light";
+        if (storedTheme === "dark") {
+          document.body.classList.add("dark");
+        }
+        if (themeToggle) {
+          const refreshLabel = () => {
+            const isDark = document.body.classList.contains("dark");
+            themeToggle.textContent = isDark ? "Light Mode" : "Dark Mode";
+          };
+          refreshLabel();
+          themeToggle.addEventListener("click", () => {
+            const isDark = document.body.classList.toggle("dark");
+            localStorage.setItem("owner_theme", isDark ? "dark" : "light");
+            refreshLabel();
+          });
+        }
+      }
+
+      function initButtons() {
+        document.getElementById("refresh-owner-kpis")?.addEventListener("click", loadOwnerKpis);
+        document.getElementById("refresh-today-summary")?.addEventListener("click", loadTodaySummary);
+        document.getElementById("refresh-schedule")?.addEventListener("click", loadSchedule);
+        document.getElementById("refresh-emergencies")?.addEventListener("click", loadEmergencyJobs);
+        document.getElementById("refresh-analytics")?.addEventListener("click", loadAnalytics);
+        document.getElementById("refresh-conversations")?.addEventListener("click", loadConversations);
+
+        document.getElementById("download-service-mix")?.addEventListener("click", () => {
+          window.open(backendBase + "/v1/owner/export/service-mix.csv", "_blank");
+        });
+        document.getElementById("download-conversations")?.addEventListener("click", () => {
+          window.open(backendBase + "/v1/owner/export/conversations.csv", "_blank");
+        });
+
+        document.getElementById("refresh-all")?.addEventListener("click", () => {
+          loadOwnerKpis();
+          loadTodaySummary();
+          loadSchedule();
+          loadEmergencyJobs();
+          loadAnalytics();
+          loadConversations();
+        });
+      }
+
+      window.addEventListener("DOMContentLoaded", () => {
+        updateConnectionStatus("connecting");
+        initAuth();
+        initThemeToggle();
+        initButtons();
+        loadOwnerKpis();
+        loadTodaySummary();
+        loadSchedule();
+        loadEmergencyJobs();
+        loadAnalytics();
+        loadConversations();
+      });
+    </script>
+  </body>
+</html>

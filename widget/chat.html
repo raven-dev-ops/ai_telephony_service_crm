@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AI Assistant Chat</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin: 0;
+        padding: 0;
+        background: #f5f5f5;
+      }
+      .chat-container {
+        max-width: 420px;
+        margin: 1rem auto;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+        display: flex;
+        flex-direction: column;
+        height: 80vh;
+      }
+      header {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid #eee;
+      }
+      header h1 {
+        margin: 0;
+        font-size: 1rem;
+      }
+      main {
+        flex: 1;
+        padding: 0.75rem 1rem;
+        overflow-y: auto;
+        background: #fafafa;
+      }
+      .message {
+        margin-bottom: 0.5rem;
+        max-width: 80%;
+        padding: 0.35rem 0.5rem;
+        border-radius: 6px;
+        font-size: 0.9rem;
+      }
+      .message.user {
+        margin-left: auto;
+        background: #e3f2fd;
+      }
+      .message.assistant {
+        margin-right: auto;
+        background: #eeeeee;
+      }
+      form {
+        display: flex;
+        padding: 0.5rem;
+        border-top: 1px solid #eee;
+        gap: 0.5rem;
+      }
+      input[type="text"] {
+        flex: 1;
+        border-radius: 4px;
+        border: 1px solid #ccc;
+        padding: 0.35rem 0.5rem;
+      }
+      button {
+        padding: 0.35rem 0.75rem;
+        border-radius: 4px;
+        border: 1px solid #ccc;
+        background: #fafafa;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+      @media (max-width: 600px) {
+        .chat-container {
+          max-width: 100%;
+          height: 100vh;
+          margin: 0;
+          border-radius: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="chat-container">
+      <header>
+        <h1 id="widget-title">AI Assistant Chat</h1>
+        <small id="widget-subtitle">For plumbing help from this business.</small><br />
+        <small>If this is a life-threatening emergency, please call 911 or your local emergency number.</small>
+        <div>
+          <label>
+            <small>API Key (X-API-Key): </small>
+            <input id="api-key-input" type="password" placeholder="Optional tenant key" />
+          </label>
+          <small id="api-key-status"></small>
+        </div>
+      </header>
+      <main id="chat-log" role="log" aria-live="polite" aria-atomic="false"></main>
+      <div style="padding: 0 1rem 0.5rem 1rem;">
+        <div>
+          <label>
+            <small>Your phone (optional): </small>
+            <input id="customer-phone-input" type="tel" placeholder="e.g. 555-123-4567" />
+          </label>
+        </div>
+        <div>
+          <label>
+            <small>Your email (optional): </small>
+            <input id="customer-email-input" type="email" placeholder="you@example.com" />
+          </label>
+        </div>
+        <small id="chat-status" aria-live="polite"></small>
+      </div>
+      <form id="chat-form">
+        <input id="chat-input" type="text" placeholder="Type your message..." autocomplete="off" aria-label="Type your message" />
+        <button type="submit" aria-label="Send message">Send</button>
+      </form>
+      <div style="padding: 0 1rem 1rem 1rem;">
+        <button id="new-conversation" type="button">New conversation</button>
+      </div>
+    </div>
+
+    <script type="module">
+      const DEFAULT_BACKEND_BASE = "http://localhost:8000";
+
+      function resolveBackendBase() {
+        try {
+          const params = new URLSearchParams(window.location.search || "");
+          const fromQuery = params.get("backend_base");
+          if (fromQuery) {
+            return fromQuery;
+          }
+        } catch (e) {
+          // Ignore query parsing errors and fall through.
+        }
+        if (window.BACKEND_BASE_URL) {
+          return window.BACKEND_BASE_URL;
+        }
+        return DEFAULT_BACKEND_BASE;
+      }
+
+      const backendBase = resolveBackendBase();
+      let conversationId = null;
+      let apiKey = localStorage.getItem("widget_api_key") || "";
+
+      function getQueryParam(name) {
+        const params = new URLSearchParams(window.location.search || "");
+        return params.get(name) || "";
+      }
+
+      const widgetToken = getQueryParam("widget_token");
+
+      const logEl = document.getElementById("chat-log");
+      const formEl = document.getElementById("chat-form");
+      const inputEl = document.getElementById("chat-input");
+      const phoneInput = document.getElementById("customer-phone-input");
+      const emailInput = document.getElementById("customer-email-input");
+      const statusEl = document.getElementById("chat-status");
+
+      function authHeaders() {
+        const headers = { "Content-Type": "application/json" };
+        if (apiKey) {
+          headers["X-API-Key"] = apiKey;
+        }
+        if (widgetToken) {
+          headers["X-Widget-Token"] = widgetToken;
+        }
+        return headers;
+      }
+
+      function appendMessage(role, text) {
+        const div = document.createElement("div");
+        div.className = `message ${role}`;
+        div.textContent = text;
+        logEl.appendChild(div);
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      async function startConversation() {
+        if (statusEl) {
+          statusEl.textContent = "Connecting to assistant...";
+        }
+        const body = {};
+        if (phoneInput && phoneInput.value.trim()) {
+          body.customer_phone = phoneInput.value.trim();
+        }
+        if (emailInput && emailInput.value.trim()) {
+          body.customer_email = emailInput.value.trim();
+        }
+        const res = await fetch(`${backendBase}/v1/widget/start`, {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          appendMessage("assistant", "Sorry, the chat service is unavailable right now.");
+          if (statusEl) {
+            statusEl.textContent = "";
+          }
+          return;
+        }
+        const data = await res.json();
+        conversationId = data.conversation_id;
+        appendMessage("assistant", data.reply_text);
+        if (statusEl) {
+          statusEl.textContent = "";
+        }
+      }
+
+      async function sendMessage(text) {
+        if (!conversationId) {
+          await startConversation();
+          if (!conversationId) return;
+        }
+        if (statusEl) {
+          statusEl.textContent = "Assistant is typing...";
+        }
+        appendMessage("user", text);
+        const res = await fetch(`${backendBase}/v1/widget/${conversationId}/message`, {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({ text }),
+        });
+        if (!res.ok) {
+          appendMessage("assistant", "There was an error sending your message.");
+          if (statusEl) {
+            statusEl.textContent = "";
+          }
+          return;
+        }
+        const data = await res.json();
+        appendMessage("assistant", data.reply_text);
+        if (statusEl) {
+          statusEl.textContent = "";
+        }
+      }
+
+      const apiKeyInput = document.getElementById("api-key-input");
+      const apiKeyStatus = document.getElementById("api-key-status");
+      if (apiKey) {
+        apiKeyInput.value = apiKey;
+        apiKeyStatus.textContent = "Using saved API key";
+      }
+      apiKeyInput.addEventListener("change", (e) => {
+        apiKey = e.target.value.trim();
+        if (apiKey) {
+          localStorage.setItem("widget_api_key", apiKey);
+          apiKeyStatus.textContent = "API key saved";
+        } else {
+          localStorage.removeItem("widget_api_key");
+          apiKeyStatus.textContent = "API key cleared";
+        }
+      });
+
+      async function loadWidgetBusiness() {
+        const titleEl = document.getElementById("widget-title");
+        const subtitleEl = document.getElementById("widget-subtitle");
+        if (!titleEl || !subtitleEl) return;
+        try {
+          const res = await fetch(`${backendBase}/v1/widget/business`, {
+            headers: authHeaders(),
+          });
+          if (!res.ok) return;
+          const info = await res.json();
+          titleEl.textContent = `Chat with ${info.name}`;
+          subtitleEl.textContent = `For plumbing help from ${info.name}.`;
+        } catch (err) {
+          // Leave defaults if the business info cannot be loaded.
+        }
+      }
+
+      formEl.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const text = inputEl.value.trim();
+        if (!text) return;
+        inputEl.value = "";
+        sendMessage(text);
+      });
+
+      // Start session on load
+      loadWidgetBusiness();
+      startConversation();
+    </script>
+  </body>
+  </html>

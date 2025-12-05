@@ -1,0 +1,74 @@
+name: Backend Release
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "backend-v*"
+
+jobs:
+  test-build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      PYTHON_VERSION: "3.12"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "${{ env.PYTHON_VERSION }}"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Run backend tests
+        working-directory: backend
+        run: |
+          pytest
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          # JSON service account key stored as a GitHub secret.
+          # The service account needs Artifact Registry write and, optionally, GKE deploy permissions.
+          credentials_json: "${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}"
+
+      - name: Set up gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: "${{ secrets.GCP_PROJECT_ID }}"
+
+      - name: Configure Docker for Artifact Registry
+        env:
+          REGION: "${{ secrets.GCP_ARTIFACT_REGION }}"
+        run: |
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push backend Docker image
+        env:
+          PROJECT_ID: "${{ secrets.GCP_PROJECT_ID }}"
+          REGION: "${{ secrets.GCP_ARTIFACT_REGION }}"
+          REPOSITORY: "${{ secrets.GCP_ARTIFACT_REPOSITORY }}"
+        run: |
+          if [ -z "${PROJECT_ID}" ] || [ -z "${REGION}" ] || [ -z "${REPOSITORY}" ]; then
+            echo "GCP_PROJECT_ID, GCP_ARTIFACT_REGION, and GCP_ARTIFACT_REPOSITORY must be set as secrets."
+            exit 1
+          fi
+
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/ai-telephony-backend"
+          TAG="${GITHUB_REF_NAME}"
+
+          echo "Building image ${IMAGE}:${TAG}"
+          docker build -t "${IMAGE}:${TAG}" -t "${IMAGE}:latest" -f backend/Dockerfile backend
+
+          echo "Pushing image tags ${IMAGE}:${TAG} and ${IMAGE}:latest"
+          docker push "${IMAGE}:${TAG}"
+          docker push "${IMAGE}:latest"
+

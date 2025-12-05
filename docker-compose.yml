@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      # Core settings
+      - PYTHONUNBUFFERED=1
+      # Calendar / Google
+      - GOOGLE_CALENDAR_ID=${GOOGLE_CALENDAR_ID:-primary}
+      - GOOGLE_CALENDAR_CREDENTIALS_FILE=/secrets/google-calendar.json
+      - CALENDAR_USE_STUB=${CALENDAR_USE_STUB:-true}
+      # SMS / Twilio
+      - SMS_PROVIDER=${SMS_PROVIDER:-stub}
+      - SMS_FROM_NUMBER=${SMS_FROM_NUMBER:-}
+      - SMS_OWNER_NUMBER=${SMS_OWNER_NUMBER:-}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
+      - VERIFY_TWILIO_SIGNATURES=${VERIFY_TWILIO_SIGNATURES:-false}
+      # Multi-tenant / auth
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-}
+      - REQUIRE_BUSINESS_API_KEY=${REQUIRE_BUSINESS_API_KEY:-false}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./app.db}
+      - USE_DB_CUSTOMERS=${USE_DB_CUSTOMERS:-true}
+      - USE_DB_APPOINTMENTS=${USE_DB_APPOINTMENTS:-true}
+      - USE_DB_CONVERSATIONS=${USE_DB_CONVERSATIONS:-true}
+      - SESSION_STORE_BACKEND=${SESSION_STORE_BACKEND:-memory}
+    volumes:
+      # Optional: mount secrets from host
+      - ./secrets:/secrets:ro
+    ports:
+      - "8000:8000"
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
