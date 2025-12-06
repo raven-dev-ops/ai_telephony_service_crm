@@ -14,5 +14,8 @@ __pycache__/
 .idea/
 
 # Local databases and secrets
+app.db
 backend/app.db
+backend/.coverage
+env.dev.twilio
 secrets/

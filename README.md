@@ -41,6 +41,14 @@ To run the backend and dashboards locally:
    - Visit `http://localhost:8000/docs` for interactive docs.
    - See `API_REFERENCE.md` for a route-by-route summary grouped by area (voice, telephony, Twilio, CRM, owner, admin, reminders, retention, widget).
 
+5. **Try self-service signup & onboarding (optional)**
+   - Enable `ALLOW_SELF_SIGNUP=true` in your backend environment.
+   - Open `dashboard/signup.html` to create a new tenant via `/v1/public/signup`, then follow the flow into `dashboard/onboarding.html` to connect calendar, email, and other integrations.
+
+6. **Try the owner AI assistant (optional)**
+   - With the owner dashboard open, use the floating chat bubble to ask questions about metrics, data definitions, and operational policies.
+   - When configured with `SPEECH_PROVIDER=openai` and `OPENAI_API_KEY`, the backend answers via `/v1/owner/assistant/query` using local documentation plus the configured OpenAI chat model.
+
 
 Source PDFs & Traceability
 --------------------------
@@ -98,6 +106,14 @@ The system is designed to support:
   - Cloud database of customers, service history, and appointments.
   - Recognition of repeat customers by phone or name with auto-population of details.
   - Linkage of conversations, jobs, and (in the Bristol example) external invoicing.
+
+- **Owner AI assistant (doc-grounded Q&A)**
+  - Owner dashboard chat bubble that lets owners ask free-form questions about metrics, dashboards, data semantics, and operating procedures.
+  - Implemented via `POST /v1/owner/assistant/query` and backed by local documentation plus the configured OpenAI chat model when `SPEECH_PROVIDER=openai` and `OPENAI_API_KEY` are set.
+
+- **Self-service signup & onboarding**
+  - Opt-in public signup endpoint (`/v1/public/signup`) and static pages (`dashboard/signup.html`, `dashboard/onboarding.html`) that let new service businesses onboard themselves when `ALLOW_SELF_SIGNUP=true`.
+  - Auth integration stubs under `/auth/{provider}/*` sketch how to connect LinkedIn, Gmail/Workspace, Google Calendar, OpenAI, and Twilio during onboarding.
 
 - **Business dashboard (web)**
   - Conversation log viewer for QA and training.
