@@ -18,3 +18,13 @@ def test_parse_address_detects_street_like_input():
 
 def test_parse_address_rejects_non_address_text():
     assert parse_address("kitchen faucet is leaking") is None
+
+
+def test_parse_address_accepts_zip_only_style_input():
+    addr = "Near 12345"
+    assert parse_address(addr) == "Near 12345"
+
+
+def test_parse_address_normalizes_whitespace_and_commas():
+    addr = "  456   Oak Avenue , Overland Park KS 66210 "
+    assert parse_address(addr) == "456 Oak Avenue, Overland Park KS 66210"

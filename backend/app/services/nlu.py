@@ -42,8 +42,10 @@ def parse_name(text: str) -> Optional[str]:
 def parse_address(text: str) -> Optional[str]:
     """Best-effort extraction of a street-style address.
 
-    Looks for text containing at least one digit and a common street suffix.
-    This is deliberately conservative and will return None when uncertain.
+    This is deliberately tolerant but still conservative:
+    - requires at least one digit (street number or ZIP code)
+    - accepts common street suffixes or a comma-separated structure
+    - accepts presence of a 5-digit ZIP even if suffix is missing
     """
     stripped = (text or "").strip()
     if not stripped:
@@ -53,7 +55,7 @@ def parse_address(text: str) -> Optional[str]:
     if not any(ch.isdigit() for ch in stripped):
         return None
 
-    suffixes = [
+    suffixes = {
         " st",
         " street",
         " ave",
@@ -68,8 +70,25 @@ def parse_address(text: str) -> Optional[str]:
         " lane",
         " ct",
         " court",
-    ]
-    if not any(suffix in lower for suffix in suffixes):
+        " hwy",
+        " highway",
+        " pkwy",
+        " parkway",
+        " ter",
+        " terrace",
+        " pl",
+        " place",
+    }
+    has_suffix = any(suffix in lower for suffix in suffixes)
+    has_comma = "," in stripped
+    has_zip = any(ch.isdigit() for ch in stripped[-5:]) and any(
+        part.isdigit() and len(part) == 5 for part in stripped.replace(",", " ").split()
+    )
+    looks_like_street_number = stripped[0].isdigit()
+
+    if not (has_suffix or has_comma or has_zip or looks_like_street_number):
         return None
 
-    return stripped
+    # Normalize whitespace/punctuation lightly.
+    normalized = " ".join(stripped.replace(" ,", ",").split())
+    return normalized
