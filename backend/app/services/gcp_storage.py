@@ -4,11 +4,11 @@ import os
 from dataclasses import dataclass
 
 try:  # Optional dependency; health checks degrade gracefully when missing.
-    from google.cloud import storage  # type: ignore[import]
+    from google.cloud import storage
 
     _HAVE_STORAGE = True
 except Exception:  # pragma: no cover - library not installed
-    storage = None  # type: ignore[assignment]
+    storage = None
     _HAVE_STORAGE = False
 
 
@@ -57,7 +57,7 @@ def get_gcs_health(timeout_seconds: float = 3.0) -> GcsHealth:
     try:  # pragma: no cover - exercised in real environments
         # The client will use default credentials (service account/workload
         # identity) when available.
-        client = storage.Client(project=project_id)  # type: ignore[call-arg]
+        client = storage.Client(project=project_id)
         # lookup_bucket is a lightweight existence check compared to listing.
         bucket = client.lookup_bucket(bucket_name)
         if bucket is None:

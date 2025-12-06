@@ -10,9 +10,9 @@ import os
 from ..config import get_settings
 
 try:  # Optional Redis dependency, mirroring services/sessions.py
-    import redis  # type: ignore[import]
+    import redis
 except Exception:  # pragma: no cover - redis is optional
-    redis = None  # type: ignore[assignment]
+    redis = None
 
 
 logger = logging.getLogger(__name__)
@@ -281,7 +281,7 @@ def _create_twilio_state_store() -> TwilioStateStore:
         else:
             try:
                 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-                client = redis.from_url(redis_url)  # type: ignore[attr-defined]
+                client = redis.from_url(redis_url)
                 return RedisTwilioStateStore(client)
             except Exception:
                 logger.warning(

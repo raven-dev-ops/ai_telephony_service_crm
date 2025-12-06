@@ -43,12 +43,23 @@ jobs:
         run: |
           bandit -q -r app -x tests
 
-      - name: Run mypy on core modules
+      - name: Run mypy on expanded modules
         working-directory: backend
         run: |
-          mypy app/config.py app/business_config.py app/services/sessions.py app/deps.py
+          mypy \
+            app/config.py \
+            app/business_config.py \
+            app/deps.py \
+            app/metrics.py \
+            app/services/stt_tts.py \
+            app/services/sessions.py \
+            app/services/gcp_storage.py \
+            app/services/geo_utils.py \
+            app/services/nlu.py \
+            app/services/zip_enrichment.py \
+            app/services/twilio_state.py
 
       - name: Run backend tests
         working-directory: backend
         run: |
-          pytest --cov=app --cov-report=term-missing --cov-fail-under=62
+          pytest --cov=app --cov-report=term-missing --cov-fail-under=80

@@ -158,6 +158,16 @@ From `Bristol_Plumbing_Project_Plan.pdf`, the target architecture consists of:
 For more detail on phases, technical components, and engineering practices, see `OUTLINE.md`,
 `ENGINEERING.md`, and `API_REFERENCE.md`.
 
+Service Components
+------------------
+
+- `backend/app/services/conversation.py`: core dialogue flow/state machine for voice and SMS sessions.
+- `backend/app/services/sessions.py`: pluggable session store (memory by default; set `SESSION_STORE_BACKEND=redis` and `REDIS_URL` to externalize state for multi-replica deployments).
+- `backend/app/services/stt_tts.py`: speech service with swap-in providers (stub vs. OpenAI) for STT/TTS.
+- `backend/app/services/sms.py`: SMS abstraction (stub vs. Twilio) plus owner/customer notification helpers.
+- `backend/app/routers/telephony.py` and `backend/app/routers/twilio_integration.py`: HTTP adapters for voice/SMS webhooks.
+- `backend/app/routers/owner.py` and `backend/app/routers/crm.py`: owner dashboard and CRM APIs backed by repositories in `backend/app/repositories.py`.
+
 
 Owner Dashboard
 ---------------

@@ -2,39 +2,37 @@ import base64
 
 import pytest
 
-from app.services import stt_tts
+from app.config import SpeechSettings
+from app.services.stt_tts import SpeechService, StubSpeechProvider
 
 
 @pytest.mark.anyio
 async def test_transcribe_returns_empty_for_placeholder_audio() -> None:
-    result = await stt_tts.speech_service.transcribe("audio://placeholder")
+    service = SpeechService(settings=SpeechSettings())
+    result = await service.transcribe("audio://placeholder")
     assert result == ""
 
 
 @pytest.mark.anyio
 async def test_transcribe_returns_empty_when_not_configured() -> None:
-    stt_tts.speech_service._settings.provider = "stub"  # type: ignore[attr-defined]
-    stt_tts.speech_service._settings.openai_api_key = None  # type: ignore[attr-defined]
-
-    result = await stt_tts.speech_service.transcribe(
-        base64.b64encode(b"audio-bytes").decode("ascii")
-    )
+    service = SpeechService(settings=SpeechSettings(provider="stub"))
+    result = await service.transcribe(base64.b64encode(b"audio-bytes").decode("ascii"))
     assert result == ""
 
 
 @pytest.mark.anyio
-async def test_transcribe_handles_invalid_base64(monkeypatch) -> None:
-    stt_tts.speech_service._settings.provider = "openai"  # type: ignore[attr-defined]
-    stt_tts.speech_service._settings.openai_api_key = "test-key"  # type: ignore[attr-defined]
+async def test_transcribe_handles_invalid_base64(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = SpeechSettings(provider="openai", openai_api_key="test-key")
+    service = SpeechService(settings=settings)
 
-    result = await stt_tts.speech_service.transcribe("not-valid-base64")
+    result = await service.transcribe("not-valid-base64")
     assert result == ""
 
 
 @pytest.mark.anyio
-async def test_transcribe_returns_text_on_success(monkeypatch) -> None:
-    stt_tts.speech_service._settings.provider = "openai"  # type: ignore[attr-defined]
-    stt_tts.speech_service._settings.openai_api_key = "test-key"  # type: ignore[attr-defined]
+async def test_transcribe_returns_text_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = SpeechSettings(provider="openai", openai_api_key="test-key")
+    service = SpeechService(settings=settings)
 
     class FakeResponse:
         def __init__(self) -> None:
@@ -59,26 +57,24 @@ async def test_transcribe_returns_text_on_success(monkeypatch) -> None:
         async def post(self, *args, **kwargs) -> FakeResponse:
             return FakeResponse()
 
-    monkeypatch.setattr(stt_tts.httpx, "AsyncClient", FakeClient)
+    monkeypatch.setattr("app.services.stt_tts.httpx.AsyncClient", FakeClient)
 
     audio_b64 = base64.b64encode(b"audio-bytes").decode("ascii")
-    result = await stt_tts.speech_service.transcribe(audio_b64)
+    result = await service.transcribe(audio_b64)
     assert result == "hello world"
 
 
 @pytest.mark.anyio
 async def test_synthesize_returns_placeholder_when_not_configured() -> None:
-    stt_tts.speech_service._settings.provider = "stub"  # type: ignore[attr-defined]
-    stt_tts.speech_service._settings.openai_api_key = None  # type: ignore[attr-defined]
-
-    result = await stt_tts.speech_service.synthesize("Hello world")
+    service = SpeechService(settings=SpeechSettings(provider="stub"))
+    result = await service.synthesize("Hello world")
     assert result == "audio://placeholder"
 
 
 @pytest.mark.anyio
-async def test_synthesize_returns_placeholder_on_error(monkeypatch) -> None:
-    stt_tts.speech_service._settings.provider = "openai"  # type: ignore[attr-defined]
-    stt_tts.speech_service._settings.openai_api_key = "test-key"  # type: ignore[attr-defined]
+async def test_synthesize_returns_placeholder_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = SpeechSettings(provider="openai", openai_api_key="test-key")
+    service = SpeechService(settings=settings)
 
     class FailingClient:
         def __init__(self, *args, **kwargs) -> None:
@@ -93,16 +89,18 @@ async def test_synthesize_returns_placeholder_on_error(monkeypatch) -> None:
         async def post(self, *args, **kwargs):
             raise RuntimeError("network error")
 
-    monkeypatch.setattr(stt_tts.httpx, "AsyncClient", FailingClient)
+    monkeypatch.setattr("app.services.stt_tts.httpx.AsyncClient", FailingClient)
 
-    result = await stt_tts.speech_service.synthesize("Hello world")
+    result = await service.synthesize("Hello world")
     assert result == "audio://placeholder"
 
 
 @pytest.mark.anyio
-async def test_synthesize_returns_base64_audio_on_success(monkeypatch) -> None:
-    stt_tts.speech_service._settings.provider = "openai"  # type: ignore[attr-defined]
-    stt_tts.speech_service._settings.openai_api_key = "test-key"  # type: ignore[attr-defined]
+async def test_synthesize_returns_base64_audio_on_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = SpeechSettings(provider="openai", openai_api_key="test-key")
+    service = SpeechService(settings=settings)
 
     class FakeResponse:
         def __init__(self) -> None:
@@ -124,9 +122,22 @@ async def test_synthesize_returns_base64_audio_on_success(monkeypatch) -> None:
         async def post(self, *args, **kwargs) -> FakeResponse:
             return FakeResponse()
 
-    monkeypatch.setattr(stt_tts.httpx, "AsyncClient", FakeClient)
+    monkeypatch.setattr("app.services.stt_tts.httpx.AsyncClient", FakeClient)
 
-    result = await stt_tts.speech_service.synthesize("Hello world")
+    result = await service.synthesize("Hello world")
     decoded = base64.b64decode(result.encode("ascii"))
     assert decoded == b"binary-audio"
+
+
+@pytest.mark.anyio
+async def test_provider_override_can_be_injected() -> None:
+    class EchoProvider(StubSpeechProvider):
+        async def synthesize(self, text: str, voice: str | None = None) -> str:
+            return f"echo:{text}"
+
+    service = SpeechService(
+        settings=SpeechSettings(provider="openai", openai_api_key="test-key"),
+        provider=EchoProvider(),
+    )
+    assert await service.synthesize("hi") == "echo:hi"
 
