@@ -60,16 +60,11 @@ def create_app() -> FastAPI:
             multi_tenant = False
             business_count = None
 
+    # Log only high-level, non-sensitive configuration to avoid leaking secrets in logs.
     logger.info(
-        "app_config_summary",
+        "app_config_summary_sanitized",
         extra={
-            "calendar_use_stub": settings.calendar.use_stub,
-            "speech_provider": settings.speech.provider,
-            "sms_provider": settings.sms.provider,
-            "require_business_api_key": settings.require_business_api_key,
-            "admin_api_key_configured": bool(settings.admin_api_key),
-            "owner_dashboard_token_configured": bool(settings.owner_dashboard_token),
-            "verify_twilio_signatures": settings.sms.verify_twilio_signatures,
+            "config_sanitized": True,
             "multi_tenant_mode": multi_tenant,
             "business_count": business_count,
         },
