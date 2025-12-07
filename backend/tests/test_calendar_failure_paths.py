@@ -37,6 +37,30 @@ def test_parse_closed_days_and_invalid_hours(monkeypatch):
     assert buffer_minutes == 0
 
 
+def test_get_business_capacity_handles_invalid_values(monkeypatch):
+    class DummyRow:
+        max_jobs_per_day = "not-an-int"
+        reserve_mornings_for_emergencies = "yes"
+        travel_buffer_minutes = "NaN"
+
+    class DummySession:
+        def get(self, model, key):
+            return DummyRow()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(calendar_mod, "SQLALCHEMY_AVAILABLE", True)
+    monkeypatch.setattr(calendar_mod, "SessionLocal", lambda: DummySession())
+
+    max_jobs, reserve_mornings, buffer_minutes = calendar_mod._get_business_capacity(
+        "biz-capacity"
+    )
+    assert max_jobs is None
+    assert reserve_mornings is True  # truthy string coerces to bool
+    assert buffer_minutes == 0
+
+
 @pytest.mark.anyio
 async def test_calendar_find_slots_falls_back_on_http_error(
     monkeypatch: pytest.MonkeyPatch,

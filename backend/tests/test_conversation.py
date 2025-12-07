@@ -352,3 +352,23 @@ def test_conversation_confirm_slot_decline(monkeypatch):
     result = run(manager.handle_input(session, "no, another time"))
     assert result.new_state["status"] == "PENDING_FOLLOWUP"
     assert result.new_state["stage"] == "COMPLETED"
+
+
+def test_conversation_confirm_slot_fallback_when_no_requested_time(monkeypatch):
+    session = CallSession(
+        id="confirm-fallback",
+        stage="CONFIRM_SLOT",
+        business_id="biz-1",
+        requested_time=None,
+    )
+    session.problem_summary = "install"
+
+    async def fake_find_slots(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(calendar_service, "find_slots", fake_find_slots)
+
+    manager = ConversationManager()
+    result = run(manager.handle_input(session, "yes"))
+    assert result.new_state["status"] == "PENDING_FOLLOWUP"
+    assert result.new_state["stage"] == "COMPLETED"
