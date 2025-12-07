@@ -173,7 +173,7 @@ def test_owner_service_mix_ignores_cancelled_and_uses_unspecified_bucket() -> No
     # Appointment with no explicit service_type should fall into "unspecified".
     start_unspecified = now - timedelta(days=1)
     end_unspecified = start_unspecified + timedelta(hours=1)
-    appt_unspecified = appointments_repo.create(
+    appointments_repo.create(
         customer_id=customer.id,
         start_time=start_unspecified,
         end_time=end_unspecified,

@@ -1,5 +1,3 @@
-import os
-
 from app.services import sessions
 
 

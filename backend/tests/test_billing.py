@@ -3,9 +3,6 @@ from datetime import UTC, datetime, timedelta
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.repositories import appointments_repo, customers_repo
-
-
 client = TestClient(app)
 
 

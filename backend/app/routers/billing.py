@@ -141,7 +141,6 @@ async def billing_webhook(
         logger.exception("billing_webhook_invalid_payload", extra={"error": str(exc)})
         raise HTTPException(status_code=400, detail="Invalid payload")
 
-    stripe_cfg = get_settings().stripe
     event_type = payload.get("type", "")
     data_obj = payload.get("data", {}).get("object", {})
     business_id = (
