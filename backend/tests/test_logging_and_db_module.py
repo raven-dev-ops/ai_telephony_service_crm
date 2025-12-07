@@ -3,6 +3,7 @@ import logging
 import pytest
 
 from app import db
+import app.config as app_config
 from app.logging_config import configure_logging
 
 
@@ -84,3 +85,62 @@ def test_init_db_handles_schema_migration_failure_gracefully(
 
     # init_db should swallow the migration error and not raise.
     db.init_db()
+
+
+def test_init_db_returns_when_sqlalchemy_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(db, "SQLALCHEMY_AVAILABLE", False)
+    monkeypatch.setattr(db, "engine", None)
+    # Should simply return without raising.
+    db.init_db()
+
+
+def test_init_db_creates_default_business_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(db, "SQLALCHEMY_AVAILABLE", True)
+
+    class DummyMeta:
+        @staticmethod
+        def create_all(bind=None) -> None:  # pragma: no cover - trivial
+            return None
+
+    class DummyBase:
+        metadata = DummyMeta()
+
+    class DummyEngine:
+        url = "postgres://example"
+
+    class DummySession:
+        def __init__(self) -> None:
+            self.added = []
+            self.commits = 0
+            self.closed = False
+
+        def get(self, model, key):  # type: ignore[no-untyped-def]
+            return None
+
+        def add(self, obj) -> None:  # pragma: no cover - trivial
+            self.added.append(obj)
+
+        def commit(self) -> None:  # pragma: no cover - trivial
+            self.commits += 1
+
+        def close(self) -> None:  # pragma: no cover - trivial
+            self.closed = True
+
+    dummy_session = DummySession()
+    monkeypatch.setattr(db, "Base", DummyBase)
+    monkeypatch.setattr(db, "engine", DummyEngine())
+    monkeypatch.setattr(db, "SessionLocal", lambda: dummy_session)
+
+    class DummyCalendar:
+        calendar_id = "cal-default"
+
+    class DummySettings:
+        calendar = DummyCalendar()
+
+    monkeypatch.setattr(app_config, "get_settings", lambda: DummySettings())
+
+    db.init_db()
+
+    # Default business should have been added and committed.
+    assert dummy_session.added
+    assert dummy_session.commits >= 1
