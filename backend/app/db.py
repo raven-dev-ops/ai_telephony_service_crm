@@ -17,7 +17,29 @@ except Exception:  # pragma: no cover - optional dependency
     SQLALCHEMY_AVAILABLE = False
 
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./app.db")
+def _build_database_url() -> str:
+    """Prefer explicit DATABASE_URL; otherwise construct one for Cloud SQL."""
+    explicit_url = os.getenv("DATABASE_URL")
+    if explicit_url:
+        return explicit_url
+
+    conn_name = os.getenv("DB_CONNECTION_NAME")
+    user = os.getenv("DB_USER")
+    password = os.getenv("DB_PASSWORD")
+    db_name = os.getenv("DB_NAME", "postgres")
+    host = os.getenv("DB_HOST")
+    port = os.getenv("DB_PORT", "5432")
+
+    if conn_name and user and password:
+        if host:
+            return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db_name}"
+        socket_host = f"/cloudsql/{conn_name}"
+        return f"postgresql+psycopg2://{user}:{password}@/{db_name}?host={socket_host}"
+
+    return "sqlite:///./app.db"
+
+
+DATABASE_URL = _build_database_url()
 
 if SQLALCHEMY_AVAILABLE:
     connect_args = (

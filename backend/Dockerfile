@@ -16,8 +16,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pyproject.toml ./
 RUN pip install --no-cache-dir .
 
-# Copy application code
+# Copy application code and utilities (seed script)
 COPY app ./app
+COPY seed_demo_data.py ./seed_demo_data.py
 
 EXPOSE 8080
 
