@@ -208,7 +208,10 @@ def require_dashboard_role(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="User-based access requires database support",
             )
-        elif settings.owner_dashboard_token and x_owner_token == settings.owner_dashboard_token:
+        elif (
+            settings.owner_dashboard_token
+            and x_owner_token == settings.owner_dashboard_token
+        ):
             # Legacy/tenant-wide token grants owner-level access when no per-user role is provided.
             roles.append("owner")
 

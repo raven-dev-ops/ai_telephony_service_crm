@@ -258,7 +258,10 @@ class ConversationManager:
         finally:
             elapsed_ms = (time.perf_counter() - start) * 1000.0
             metrics.record_conversation_latency(elapsed_ms)
-            business_id = getattr(session, "business_id", "default_business") or "default_business"
+            business_id = (
+                getattr(session, "business_id", "default_business")
+                or "default_business"
+            )
             if success:
                 metrics.conversation_messages += 1
             else:

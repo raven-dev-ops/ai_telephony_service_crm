@@ -14,7 +14,9 @@ from ..repositories import appointments_repo, conversations_repo, customers_repo
 
 
 router = APIRouter(
-    dependencies=[Depends(require_dashboard_role(["admin", "owner", "staff", "viewer"]))]
+    dependencies=[
+        Depends(require_dashboard_role(["admin", "owner", "staff", "viewer"]))
+    ]
 )
 
 

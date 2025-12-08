@@ -26,7 +26,9 @@ from ..business_config import get_voice_for_business
 
 
 router = APIRouter(
-    dependencies=[Depends(require_dashboard_role(["admin", "owner", "staff", "viewer"]))]
+    dependencies=[
+        Depends(require_dashboard_role(["admin", "owner", "staff", "viewer"]))
+    ]
 )
 
 

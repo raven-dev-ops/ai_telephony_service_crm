@@ -98,7 +98,9 @@ def test_owner_calendar_views_and_reports() -> None:
     cal_body = cal_resp.json()
     assert cal_body["days"]
 
-    pdf_resp = client.get("/v1/owner/calendar/report.pdf", params={"day": day1.isoformat()})
+    pdf_resp = client.get(
+        "/v1/owner/calendar/report.pdf", params={"day": day1.isoformat()}
+    )
     assert pdf_resp.status_code == 200
     assert pdf_resp.content  # fallback PDF bytes or real PDF should be non-empty
 

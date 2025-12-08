@@ -15,7 +15,9 @@ def test_parse_name_rejects_empty_or_long_text():
     assert parse_name("") is None
     assert parse_name("singleword") is None
     assert (
-        parse_name("this phrase is way too long to be a realistic caller name so reject")
+        parse_name(
+            "this phrase is way too long to be a realistic caller name so reject"
+        )
         is None
     )
 

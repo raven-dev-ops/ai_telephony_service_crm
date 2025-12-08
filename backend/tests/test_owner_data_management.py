@@ -47,9 +47,9 @@ def _seed_db_data() -> None:
         session.query(ConversationDB).filter(ConversationDB.id == "conv-del").delete(
             synchronize_session=False
         )
-        session.query(AppointmentDB).filter(
-            AppointmentDB.id == "appt-del"
-        ).delete(synchronize_session=False)
+        session.query(AppointmentDB).filter(AppointmentDB.id == "appt-del").delete(
+            synchronize_session=False
+        )
         session.query(CustomerDB).filter(CustomerDB.id == "cust-del").delete(
             synchronize_session=False
         )
@@ -131,7 +131,9 @@ def test_owner_onboarding_integrations_updates_flags() -> None:
     resp = client.patch("/v1/owner/onboarding/integrations", json=payload)
     assert resp.status_code == 200
     body = resp.json()
-    integrations = {item["provider"]: item["connected"] for item in body["integrations"]}
+    integrations = {
+        item["provider"]: item["connected"] for item in body["integrations"]
+    }
     assert integrations["linkedin"] is True
     assert integrations["gcalendar"] is True
     assert integrations["quickbooks"] is False

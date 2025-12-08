@@ -56,18 +56,21 @@ def _reset_db(business_id: str) -> None:
     session = SessionLocal()
     try:
         conv_ids = [
-            cid for (cid,) in session.query(ConversationDB.id).filter(ConversationDB.business_id == business_id)
+            cid
+            for (cid,) in session.query(ConversationDB.id).filter(
+                ConversationDB.business_id == business_id
+            )
         ]
         if conv_ids:
             session.query(ConversationMessageDB).filter(
                 ConversationMessageDB.conversation_id.in_(conv_ids)
             ).delete(synchronize_session=False)
-        session.query(ConversationDB).filter(ConversationDB.business_id == business_id).delete(
-            synchronize_session=False
-        )
-        session.query(AppointmentDB).filter(AppointmentDB.business_id == business_id).delete(
-            synchronize_session=False
-        )
+        session.query(ConversationDB).filter(
+            ConversationDB.business_id == business_id
+        ).delete(synchronize_session=False)
+        session.query(AppointmentDB).filter(
+            AppointmentDB.business_id == business_id
+        ).delete(synchronize_session=False)
         session.query(CustomerDB).filter(CustomerDB.business_id == business_id).delete(
             synchronize_session=False
         )
@@ -129,7 +132,15 @@ def seed_demo_data(
     # Customers
     for c in _demo_customers(anonymize):
         if dry_run:
-            customers.append(Customer(id="dry", name=c["name"], phone=c["phone"], address=c["address"], business_id=business_id))
+            customers.append(
+                Customer(
+                    id="dry",
+                    name=c["name"],
+                    phone=c["phone"],
+                    address=c["address"],
+                    business_id=business_id,
+                )
+            )
             continue
         cust = customers_repo.upsert(
             name=c["name"],
@@ -218,13 +229,19 @@ def seed_demo_data(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Seed demo/staging data.")
     parser.add_argument("--business-id", default="demo_plumbing")
-    parser.add_argument("--reset", action="store_true", help="Clear existing data for this business before seeding.")
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Clear existing data for this business before seeding.",
+    )
     parser.add_argument(
         "--if-empty",
         action="store_true",
         help="Skip seeding if the target business already has customers.",
     )
-    parser.add_argument("--anonymize", action="store_true", help="Use generic names/phones.")
+    parser.add_argument(
+        "--anonymize", action="store_true", help="Use generic names/phones."
+    )
     parser.add_argument("--dry-run", action="store_true", help="Plan only, no writes.")
     args = parser.parse_args()
 
@@ -244,7 +261,9 @@ def main() -> None:
                 .count()
             )
             if existing > 0:
-                print(f"Business {args.business_id} already has {existing} customers; skipping seed (--if-empty).")
+                print(
+                    f"Business {args.business_id} already has {existing} customers; skipping seed (--if-empty)."
+                )
                 return
         finally:
             session.close()
@@ -253,7 +272,9 @@ def main() -> None:
         _ensure_business(args.business_id)
 
     result = seed_demo_data(args.business_id, args.anonymize, dry_run=args.dry_run)
-    print(f"Seeded (business={args.business_id}, anonymize={args.anonymize}, dry_run={args.dry_run}):")
+    print(
+        f"Seeded (business={args.business_id}, anonymize={args.anonymize}, dry_run={args.dry_run}):"
+    )
     print(f"- customers: {len(result['customers'])}")
     print(f"- appointments: {len(result['appointments'])}")
     print(f"- conversations: {len(result['conversations'])}")

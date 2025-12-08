@@ -79,6 +79,7 @@ async def run_load(
     ]
 
     async with httpx.AsyncClient(limits=connector_limits) as client:
+
         async def worker(idx: int) -> None:
             nonlocal failures
             async with sem:
@@ -100,12 +101,14 @@ def summarize(latencies: list[float]) -> dict[str, float]:
     if not latencies:
         return {"avg": 0.0, "p50": 0.0, "p95": 0.0, "p99": 0.0, "max": 0.0}
     sorted_vals = sorted(latencies)
+
     def pct(p: float) -> float:
         if not sorted_vals:
             return 0.0
         idx = int(round((len(sorted_vals) - 1) * p))
         idx = max(0, min(idx, len(sorted_vals) - 1))
         return sorted_vals[idx]
+
     return {
         "avg": statistics.mean(sorted_vals),
         "p50": pct(0.50),

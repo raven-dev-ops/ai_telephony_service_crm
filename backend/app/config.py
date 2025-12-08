@@ -39,7 +39,8 @@ class OAuthSettings(BaseModel):
     google_client_id: str | None = os.getenv("GOOGLE_CLIENT_ID")
     google_client_secret: str | None = os.getenv("GOOGLE_CLIENT_SECRET")
     gmail_scopes: str = os.getenv(
-        "GMAIL_SCOPES", "openid email profile https://www.googleapis.com/auth/gmail.readonly"
+        "GMAIL_SCOPES",
+        "openid email profile https://www.googleapis.com/auth/gmail.readonly",
     )
     gcalendar_scopes: str = os.getenv(
         "GCALENDAR_SCOPES",
@@ -159,7 +160,9 @@ class AppSettings(BaseModel):
             openai_chat_model=os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini"),
         )
         oauth = OAuthSettings(
-            redirect_base=os.getenv("OAUTH_REDIRECT_BASE", "http://localhost:8000/auth"),
+            redirect_base=os.getenv(
+                "OAUTH_REDIRECT_BASE", "http://localhost:8000/auth"
+            ),
             state_secret=os.getenv("AUTH_STATE_SECRET", "dev-secret"),
             linkedin_client_id=os.getenv("LINKEDIN_CLIENT_ID"),
             linkedin_client_secret=os.getenv("LINKEDIN_CLIENT_SECRET"),
@@ -282,7 +285,9 @@ class AppSettings(BaseModel):
 
         if self.sms.provider == "twilio":
             if not (self.sms.twilio_account_sid and self.sms.twilio_auth_token):
-                warnings.append("Twilio provider requires TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.")
+                warnings.append(
+                    "Twilio provider requires TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN."
+                )
         if not self.stripe.use_stub and not self.stripe.api_key:
             warnings.append("STRIPE_API_KEY is required when STRIPE_USE_STUB=false.")
         if self.speech.provider == "openai" and not self.speech.openai_api_key:

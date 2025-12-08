@@ -17,6 +17,7 @@ def _new_id() -> str:
 
 
 if SQLALCHEMY_AVAILABLE:
+
     class BusinessDB(Base):  # type: ignore[misc]
         __tablename__ = "businesses"
 
@@ -72,7 +73,6 @@ if SQLALCHEMY_AVAILABLE:
         subscription_status = Column(String(64), nullable=True)  # type: ignore[call-arg]
         subscription_current_period_end = Column(DateTime, nullable=True)  # type: ignore[call-arg]
 
-
     class UserDB(Base):  # type: ignore[misc]
         __tablename__ = "users"
 
@@ -83,7 +83,6 @@ if SQLALCHEMY_AVAILABLE:
         active_business_id = Column(String, nullable=True)  # type: ignore[call-arg]
         created_at = Column(DateTime, nullable=False, default=_utcnow, index=True)  # type: ignore[call-arg]
 
-
     class BusinessUserDB(Base):  # type: ignore[misc]
         __tablename__ = "business_users"
 
@@ -91,7 +90,6 @@ if SQLALCHEMY_AVAILABLE:
         business_id = Column(String, nullable=False, index=True)  # type: ignore[call-arg]
         user_id = Column(String, nullable=False, index=True)  # type: ignore[call-arg]
         role = Column(String, nullable=False, default="owner")  # type: ignore[call-arg]
-
 
     class CustomerDB(Base):  # type: ignore[misc]
         __tablename__ = "customers"
@@ -105,7 +103,6 @@ if SQLALCHEMY_AVAILABLE:
         created_at = Column(DateTime, nullable=False, default=_utcnow, index=True)  # type: ignore[call-arg]
         sms_opt_out = Column(Boolean, nullable=False, default=False)  # type: ignore[call-arg]
         tags = Column(String, nullable=True)  # type: ignore[call-arg]
-
 
     class AppointmentDB(Base):  # type: ignore[misc]
         __tablename__ = "appointments"
@@ -130,7 +127,6 @@ if SQLALCHEMY_AVAILABLE:
         tags = Column(String, nullable=True)  # type: ignore[call-arg]
         technician_id = Column(String, nullable=True)  # type: ignore[call-arg]
 
-
     class ConversationDB(Base):  # type: ignore[misc]
         __tablename__ = "conversations"
 
@@ -141,7 +137,6 @@ if SQLALCHEMY_AVAILABLE:
         business_id = Column(String, nullable=False, index=True)  # type: ignore[call-arg]
         created_at = Column(DateTime, nullable=False, default=_utcnow, index=True)  # type: ignore[call-arg]
 
-
     class ConversationMessageDB(Base):  # type: ignore[misc]
         __tablename__ = "conversation_messages"
 
@@ -150,7 +145,6 @@ if SQLALCHEMY_AVAILABLE:
         role = Column(String, nullable=False)  # type: ignore[call-arg]
         text = Column(String, nullable=False)  # type: ignore[call-arg]
         timestamp = Column(DateTime, nullable=False, default=_utcnow, index=True)  # type: ignore[call-arg]
-
 
     class RetentionPurgeLogDB(Base):  # type: ignore[misc]
         __tablename__ = "retention_purge_logs"
@@ -163,7 +157,6 @@ if SQLALCHEMY_AVAILABLE:
         conversations_deleted = Column(Integer, nullable=False, default=0)  # type: ignore[call-arg]
         conversation_messages_deleted = Column(Integer, nullable=False, default=0)  # type: ignore[call-arg]
 
-
     class TechnicianDB(Base):  # type: ignore[misc]
         __tablename__ = "technicians"
 
@@ -173,7 +166,6 @@ if SQLALCHEMY_AVAILABLE:
         color = Column(String, nullable=True)  # type: ignore[call-arg]
         is_active = Column(Boolean, nullable=False, default=True)  # type: ignore[call-arg]
         created_at = Column(DateTime, nullable=False, default=_utcnow, index=True)  # type: ignore[call-arg]
-
 
     class AuditEventDB(Base):  # type: ignore[misc]
         __tablename__ = "audit_events"
@@ -186,7 +178,6 @@ if SQLALCHEMY_AVAILABLE:
         method = Column(String, nullable=False)  # type: ignore[call-arg]
         status_code = Column(Integer, nullable=False)  # type: ignore[call-arg]
 
-
     class SmsAuditDB(Base):  # type: ignore[misc]
         __tablename__ = "sms_audit"
 
@@ -197,7 +188,9 @@ if SQLALCHEMY_AVAILABLE:
         direction = Column(String, nullable=False)  # type: ignore[call-arg]
         message = Column(String, nullable=True)  # type: ignore[call-arg]
         event = Column(String, nullable=False)  # type: ignore[call-arg]  # "opt_out", "opt_in", "sent", "blocked"
+
 else:  # pragma: no cover - for environments without SQLAlchemy
+
     class BusinessDB:  # type: ignore[misc]
         __tablename__ = "businesses"
         id: str

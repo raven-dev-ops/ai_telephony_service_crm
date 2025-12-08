@@ -57,12 +57,16 @@ class InMemoryJobQueue:
                     job.error = str(exc)
                     metrics.background_job_errors += 1
                     metrics.job_queue_failed += 1
-                    logger.exception("job_failed", extra={"job_id": job.id, "name": job.name})
+                    logger.exception(
+                        "job_failed", extra={"job_id": job.id, "name": job.name}
+                    )
                 finally:
                     job.finished_at = time.time()
                     self._queue.task_done()
 
-        self._worker = threading.Thread(target=_worker_loop, name="job-queue-worker", daemon=True)
+        self._worker = threading.Thread(
+            target=_worker_loop, name="job-queue-worker", daemon=True
+        )
         self._worker.start()
 
     def stats(self) -> Dict[str, Any]:

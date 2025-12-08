@@ -22,9 +22,9 @@ pytestmark = pytest.mark.skipif(
 
 
 def _cleanup_business(session, business_id: str) -> None:
-    session.query(AppointmentDB).filter(AppointmentDB.business_id == business_id).delete(
-        synchronize_session=False
-    )
+    session.query(AppointmentDB).filter(
+        AppointmentDB.business_id == business_id
+    ).delete(synchronize_session=False)
     conv_ids = [
         row.id
         for row in session.query(ConversationDB.id)

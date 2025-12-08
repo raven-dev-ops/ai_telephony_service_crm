@@ -657,7 +657,9 @@ def _build_business_usage(business_id: str, row: BusinessDB) -> BusinessUsageRes
     # Consider conversation activity too.
     for conv in conversations:
         created = getattr(conv, "created_at", None)
-        if created is not None and (last_activity_at is None or created > last_activity_at):
+        if created is not None and (
+            last_activity_at is None or created > last_activity_at
+        ):
             last_activity_at = created
 
     return BusinessUsageResponse(
@@ -906,11 +908,11 @@ def prune_retention() -> RetentionPruneResponse:
     is written for auditability.
     """
     try:
-        result: PurgeResult = run_retention_purge(
-            actor_type="admin", trigger="manual"
-        )
+        result: PurgeResult = run_retention_purge(actor_type="admin", trigger="manual")
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        )
     return RetentionPruneResponse(
         appointments_deleted=result.appointments_deleted,
         conversations_deleted=result.conversations_deleted,

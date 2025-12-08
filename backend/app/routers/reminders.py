@@ -77,7 +77,9 @@ async def send_upcoming_reminders(
                     f"Reminder: your appointment with {business_name} is scheduled for {when_str}.\n"
                     f"If you need to reschedule, please call or text."
                 )
-            await sms_service.notify_customer(customer.phone, body, business_id=business_id)
+            await sms_service.notify_customer(
+                customer.phone, body, business_id=business_id
+            )
             appt.reminder_sent = True
             sent += 1
 

@@ -204,4 +204,3 @@ def test_owner_metrics_segments_and_followups() -> None:
     retention = client.get("/v1/owner/retention").json()
     assert retention["total_messages_sent"] == 1
     assert retention["campaigns"][0]["campaign_type"] == "winback"
-

@@ -21,4 +21,3 @@ async def test_owner_assistant_returns_stub_when_not_configured(monkeypatch) -> 
     )
     answer = await svc.answer("How do I view my metrics?")
     assert "not fully configured" in answer.answer
-

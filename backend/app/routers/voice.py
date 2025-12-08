@@ -121,9 +121,7 @@ async def session_input(
             raise exc
         # Fail-safe: return a fallback response without raising, so telephony flows can
         # gracefully continue or forward the call.
-        fallback_text = (
-            "I'm having trouble speaking right now. I'll notify the team and someone will call you back shortly."
-        )
+        fallback_text = "I'm having trouble speaking right now. I'll notify the team and someone will call you back shortly."
         fallback_state: dict = {}
         session_state_attr = getattr(session, "state", None)
         if isinstance(session_state_attr, dict):

@@ -37,10 +37,14 @@ def test_telephony_inbound_and_audio_flow():
 def test_telephony_inbound_handles_exception(monkeypatch):
     # Force conversation handler to raise to exercise fail-safe branch.
     monkeypatch.setattr(
-        conversation.conversation_manager, "handle_input", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom"))
+        conversation.conversation_manager,
+        "handle_input",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
     )
     monkeypatch.setattr(
-        conversation.speech_service, "synthesize", lambda *args, **kwargs: "audio://placeholder"
+        conversation.speech_service,
+        "synthesize",
+        lambda *args, **kwargs: "audio://placeholder",
     )
 
     resp = client.post("/telephony/inbound", json={"caller_phone": "999"})
@@ -75,10 +79,14 @@ def test_telephony_audio_transcribe_path(monkeypatch):
         return "audio://ok"
 
     monkeypatch.setattr(conversation.speech_service, "transcribe", fake_transcribe)
-    monkeypatch.setattr(conversation.conversation_manager, "handle_input", fake_handle_input)
+    monkeypatch.setattr(
+        conversation.conversation_manager, "handle_input", fake_handle_input
+    )
     monkeypatch.setattr(conversation.speech_service, "synthesize", fake_synthesize)
 
-    resp = client.post("/telephony/audio", json={"session_id": session.id, "audio": "b64://fake"})
+    resp = client.post(
+        "/telephony/audio", json={"session_id": session.id, "audio": "b64://fake"}
+    )
     assert resp.status_code == 200
     body = resp.json()
     assert body["reply_text"] == "Acknowledged"

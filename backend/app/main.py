@@ -393,7 +393,9 @@ def create_app() -> FastAPI:
         cumulative += float(
             metrics.conversation_latency_bucket_counts.get(float("inf"), 0)
         )
-        lines.append(f'ai_telephony_conversation_latency_bucket{{le="+Inf"}} {cumulative}')
+        lines.append(
+            f'ai_telephony_conversation_latency_bucket{{le="+Inf"}} {cumulative}'
+        )
         emit(
             "ai_telephony_conversation_latency_count",
             float(metrics.conversation_latency_samples),

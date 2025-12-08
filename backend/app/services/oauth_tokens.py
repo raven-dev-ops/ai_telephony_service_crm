@@ -19,7 +19,12 @@ class InMemoryOAuthStore:
         self._tokens: Dict[tuple[str, str], OAuthToken] = {}
 
     def save_tokens(
-        self, provider: str, business_id: str, access_token: str, refresh_token: str, expires_in: int = 3600
+        self,
+        provider: str,
+        business_id: str,
+        access_token: str,
+        refresh_token: str,
+        expires_in: int = 3600,
     ) -> OAuthToken:
         tok = OAuthToken(
             access_token=access_token,

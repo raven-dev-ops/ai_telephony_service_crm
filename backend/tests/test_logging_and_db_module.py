@@ -87,14 +87,18 @@ def test_init_db_handles_schema_migration_failure_gracefully(
     db.init_db()
 
 
-def test_init_db_returns_when_sqlalchemy_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_init_db_returns_when_sqlalchemy_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(db, "SQLALCHEMY_AVAILABLE", False)
     monkeypatch.setattr(db, "engine", None)
     # Should simply return without raising.
     db.init_db()
 
 
-def test_init_db_creates_default_business_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_init_db_creates_default_business_when_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(db, "SQLALCHEMY_AVAILABLE", True)
 
     class DummyMeta:

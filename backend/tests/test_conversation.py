@@ -310,7 +310,11 @@ def test_conversation_ask_schedule_decline_sets_pending_followup(monkeypatch):
     session.address = "123 Main"
 
     async def fake_find_slots(*args, **kwargs):
-        return [TimeSlot(start=datetime.now(UTC), end=datetime.now(UTC) + timedelta(hours=1))]
+        return [
+            TimeSlot(
+                start=datetime.now(UTC), end=datetime.now(UTC) + timedelta(hours=1)
+            )
+        ]
 
     monkeypatch.setattr(calendar_service, "find_slots", fake_find_slots)
 

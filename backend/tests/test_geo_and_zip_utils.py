@@ -127,9 +127,7 @@ def test_geocode_address_success_and_cache(monkeypatch):
         def json(self):
             return {
                 "status": self._status,
-                "results": [
-                    {"geometry": {"location": {"lat": 1.23, "lng": 4.56}}}
-                ],
+                "results": [{"geometry": {"location": {"lat": 1.23, "lng": 4.56}}}],
             }
 
     def fake_get(url, params=None, timeout=5.0):

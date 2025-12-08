@@ -24,9 +24,7 @@ from app import db_models  # noqa: F401,E402 - ensure models are imported
 target_metadata = Base.metadata
 
 # Use DATABASE_URL if provided, otherwise fall back to alembic.ini value.
-config.set_main_option(
-    "sqlalchemy.url", os.getenv("DATABASE_URL", DATABASE_URL)
-)
+config.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL", DATABASE_URL))
 
 
 def run_migrations_offline() -> None:

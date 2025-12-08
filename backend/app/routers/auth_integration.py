@@ -70,7 +70,9 @@ def auth_start(
 
     if provider_norm == "linkedin":
         if not oauth.linkedin_client_id:
-            authorization_url = f"https://example.com/oauth/{provider_norm}?state={state}"
+            authorization_url = (
+                f"https://example.com/oauth/{provider_norm}?state={state}"
+            )
         else:
             authorization_url = (
                 "https://www.linkedin.com/oauth/v2/authorization"
@@ -81,12 +83,12 @@ def auth_start(
             )
     elif provider_norm in {"gmail", "gcalendar"}:
         scopes = (
-            oauth.gmail_scopes
-            if provider_norm == "gmail"
-            else oauth.gcalendar_scopes
+            oauth.gmail_scopes if provider_norm == "gmail" else oauth.gcalendar_scopes
         )
         if not oauth.google_client_id:
-            authorization_url = f"https://example.com/oauth/{provider_norm}?state={state}"
+            authorization_url = (
+                f"https://example.com/oauth/{provider_norm}?state={state}"
+            )
         else:
             authorization_url = (
                 "https://accounts.google.com/o/oauth2/v2/auth"
@@ -99,9 +101,7 @@ def auth_start(
     else:
         # For openai/twilio or other providers, keep a placeholder.
         authorization_url = f"https://example.com/oauth/{provider_norm}?state={state}"
-    note = (
-        "Replace authorization_url with the provider's real OAuth endpoint in production."
-    )
+    note = "Replace authorization_url with the provider's real OAuth endpoint in production."
     return AuthStartResponse(
         provider=provider_norm,
         authorization_url=authorization_url,

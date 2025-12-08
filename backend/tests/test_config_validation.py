@@ -28,9 +28,13 @@ def test_config_validation_emits_warnings_for_misconfig(monkeypatch, caplog):
     _ = get_settings()
 
     warning_details = [
-        getattr(rec, "detail", rec.message) for rec in caplog.records if rec.levelno >= logging.WARNING
+        getattr(rec, "detail", rec.message)
+        for rec in caplog.records
+        if rec.levelno >= logging.WARNING
     ]
-    assert any("Twilio provider requires TWILIO_ACCOUNT_SID" in m for m in warning_details)
+    assert any(
+        "Twilio provider requires TWILIO_ACCOUNT_SID" in m for m in warning_details
+    )
     assert any("STRIPE_API_KEY is required" in m for m in warning_details)
     assert any("OPENAI_API_KEY is required" in m for m in warning_details)
     assert any("QBO_CLIENT_SECRET is missing" in m for m in warning_details)

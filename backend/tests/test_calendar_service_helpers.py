@@ -23,9 +23,7 @@ def test_business_hours_and_alignment_guard_against_bad_config(monkeypatch) -> N
     )
     monkeypatch.setattr(calendar_svc, "get_settings", lambda: dummy_settings)
 
-    open_hour, close_hour, closed = calendar_svc._get_business_hours(
-        business_id=None
-    )
+    open_hour, close_hour, closed = calendar_svc._get_business_hours(business_id=None)
     assert open_hour == 10
     assert close_hour == 10
     # Guard returns an empty closed set when hours are misconfigured.

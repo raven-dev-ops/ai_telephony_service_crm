@@ -76,4 +76,3 @@ def test_create_patch_rotate_business_and_manage_technicians() -> None:
     updated = update_resp.json()
     assert updated["name"] == "Tech Updated"
     assert updated["is_active"] is False
-

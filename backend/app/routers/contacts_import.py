@@ -164,9 +164,14 @@ async def import_contacts(
             )
 
     # In testing, run inline to simplify assertions.
-    if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("TESTING", "false").lower() == "true":
+    if (
+        os.getenv("PYTEST_CURRENT_TEST")
+        or os.getenv("TESTING", "false").lower() == "true"
+    ):
         _job()
-        result = result_holder.get("result") or ImportResult(imported=0, skipped=0, errors=[])
+        result = result_holder.get("result") or ImportResult(
+            imported=0, skipped=0, errors=[]
+        )
         return ContactImportResponse(
             imported=result.imported, skipped=result.skipped, errors=result.errors
         )

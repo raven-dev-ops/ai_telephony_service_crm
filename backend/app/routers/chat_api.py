@@ -269,4 +269,6 @@ async def chat_stream(
         "X-Accel-Buffering": "no",
     }
     response.headers["X-Conversation-ID"] = conv.id
-    return StreamingResponse(event_stream(), media_type="text/event-stream", headers=headers)
+    return StreamingResponse(
+        event_stream(), media_type="text/event-stream", headers=headers
+    )

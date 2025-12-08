@@ -9,7 +9,9 @@ client = TestClient(app, raise_server_exceptions=False)
 
 class DummyAnswer:
     async def __call__(self, question: str, business_context=None):
-        return OwnerAssistantAnswer(answer="observability test answer", used_model="stub-model")
+        return OwnerAssistantAnswer(
+            answer="observability test answer", used_model="stub-model"
+        )
 
 
 def test_chat_headers_and_latency_buckets(monkeypatch):
