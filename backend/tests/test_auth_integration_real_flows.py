@@ -20,7 +20,7 @@ def test_google_and_linkedin_oauth_flow(monkeypatch):
     assert start.status_code == 200
     url = start.json()["authorization_url"]
     parsed = urlparse(url)
-    assert "accounts.google.com" in parsed.netloc
+    assert parsed.hostname == "accounts.google.com"
     params = parse_qs(parsed.query)
     assert params["client_id"][0] == settings.oauth.google_client_id
     state = params["state"][0]

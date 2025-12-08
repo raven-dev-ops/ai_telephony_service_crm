@@ -35,6 +35,13 @@ dev = [
     "trio>=0.23.0",
 ]
 
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+exclude = ["alembic*", "tests*"]
+
 [tool.mypy]
 python_version = "3.12"
 ignore_missing_imports = true

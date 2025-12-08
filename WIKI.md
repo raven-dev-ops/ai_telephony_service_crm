@@ -203,3 +203,11 @@ These principles should inform every code and infrastructure contribution to thi
   alerts unaffected.
 - Periodically test opt-out flows (in non-production tenants) to ensure the system honors
   preferences and complies with relevant messaging guidelines.
+
+
+7. Backend Auth & Packaging Notes
+---------------------------------
+
+- Editable installs use explicit setuptools discovery (`backend/pyproject.toml`) to package only the `app` module while excluding `alembic` and test code, preventing accidental inclusion of migration scaffolding.
+- OAuth integration tests (`backend/tests/test_auth_integration_real_flows.py`) assert the Google authorization hostname equals `accounts.google.com` and validate expected query params (`client_id`, `state`) to guard against incomplete URL sanitization and catch misconfigurations early.
+- OAuth test fixtures set `state_secret` for deterministic runs; ensure `GOOGLE_CLIENT_ID` and `LINKEDIN_CLIENT_ID` are configured or defaulted before running integration tests.
