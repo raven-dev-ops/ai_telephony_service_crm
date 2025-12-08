@@ -38,10 +38,7 @@ dev = [
 
 [tool.setuptools]
 package-dir = {"" = "."}
-
-[tool.setuptools.packages.find]
-include = ["app*"]
-exclude = ["alembic*", "tests*"]
+packages = ["app"]
 
 [tool.mypy]
 python_version = "3.12"
