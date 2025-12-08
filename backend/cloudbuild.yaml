@@ -28,8 +28,8 @@ steps:
       - --allow-unauthenticated
       - --service-account=ai-telephony-backend-runner@$PROJECT_ID.iam.gserviceaccount.com
       - --add-cloudsql-instances=google-mpf-dmxmytcubly9:us-central1:ai-telephony-db
-      - --set-secrets=DB_PASSWORD=backend-db-password:latest,DB_CONNECTION_NAME=backend-db-connection-name:latest,STRIPE_API_KEY=stripe-api-key:latest,STRIPE_PUBLISHABLE_KEY=stripe-publishable-key:latest
-      - --set-env-vars=DB_USER=app_user,DB_NAME=ai_telephony,GCS_DASHBOARD_BUCKET=ai-telephony-dash-poc-mpf-dmxmytcubly9,STRIPE_USE_STUB=false,STRIPE_VERIFY_SIGNATURES=false,STRIPE_PRICE_BASIC=price_basic_test,STRIPE_PRICE_GROWTH=price_growth_test,STRIPE_PRICE_SCALE=price_scale_test
+      - --set-secrets=DB_PASSWORD=backend-db-password:latest,DB_CONNECTION_NAME=backend-db-connection-name:latest,STRIPE_API_KEY=stripe-api-key:latest,STRIPE_PUBLISHABLE_KEY=stripe-publishable-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest
+      - --set-env-vars=DB_USER=app_user,DB_NAME=ai_telephony,GCS_DASHBOARD_BUCKET=ai-telephony-dash-poc-mpf-dmxmytcubly9,STRIPE_USE_STUB=false,STRIPE_VERIFY_SIGNATURES=true,STRIPE_PRICE_BASIC=price_basic_test,STRIPE_PRICE_GROWTH=price_growth_test,STRIPE_PRICE_SCALE=price_scale_test,STRIPE_PAYMENT_LINK_URL=https://buy.stripe.com/test_28E28kfa82sPc3m2zxfYY00,STRIPE_BILLING_PORTAL_URL=https://billing.stripe.com/p/login/test_28E28kfa82sPc3m2zxfYY00
       - --vpc-connector=cr-default
       - --vpc-egress=private-ranges-only
 images:

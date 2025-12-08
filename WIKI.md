@@ -49,6 +49,48 @@ the Bristol Plumbing PDFs and the RavDevOps engineering whitepaper.
   - Office assistant or dispatcher (if the business grows).
   - Additional technicians with read-only access to schedules and job notes.
 
+4. Platform Deployment (GCP)
+----------------------------
+
+- **Cloud Run**: Service `ai-telephony-backend` in `us-central1`, connected to VPC connector `cr-default` and Cloud SQL instance `ai-telephony-db` (Postgres) in the same region. Service requires an identity token (public unauth is blocked by org policy).
+- **Database**: Cloud SQL Postgres instance `ai-telephony-db`, database `ai_telephony`, user `app_user`. Password is stored in Secret Manager (`backend-db-password`) and injected via Cloud Run.
+- **Secrets**: Stored in Secret Manager and wired via Cloud Run: `backend-db-password`, `backend-db-connection-name`, `stripe-api-key`, `stripe-publishable-key`, `stripe-webhook-secret`.
+- **Build/Deploy**: Cloud Build trigger `ai-telephony-backend-ci` builds with `backend/cloudbuild.yaml`, publishes to Artifact Registry `ai-telephony-backend/backend`, deploys to Cloud Run, and sets env vars for DB, GCS dashboards, and Stripe.
+- **Stripe (test mode)**:
+  - Payment link: `https://buy.stripe.com/test_28E28kfa82sPc3m2zxfYY00`
+  - Billing portal link: `https://billing.stripe.com/p/login/test_28E28kfa82sPc3m2zxfYY00`
+  - Webhook endpoint: `https://ai-telephony-backend-215484517190.us-central1.run.app/v1/billing/webhook` (secret in `stripe-webhook-secret`, signature verification enabled).
+- **Dashboards/Storage**: GCS bucket `ai-telephony-dash-poc-mpf-dmxmytcubly9` for dashboard assets. Cloud Run proxy/dashboards use private egress via VPC connector.
+
+5. Developer Operations
+-----------------------
+
+- **Stripe CLI**: Windows binary checked into `stripe-cli/stripe.exe`. Login already paired to the sandbox account; run commands with `.\stripe-cli\stripe.exe ...`.
+  - Listen locally: `.\stripe-cli\stripe.exe listen --forward-to localhost:4242/webhook`
+  - Trigger test events: `.\stripe-cli\stripe.exe trigger payment_intent.succeeded`
+- **Local lint/tests**: `cd backend && python -m ruff check .` and `python -m pytest --maxfail=1 --disable-warnings -q` both currently pass (312 tests, 1 skipped).
+- **Manual deploy**: To redeploy with current secrets/envs:
+  ```
+  gcloud run services update ai-telephony-backend --region us-central1 \
+    --add-cloudsql-instances=google-mpf-dmxmytcubly9:us-central1:ai-telephony-db \
+    --set-secrets=DB_PASSWORD=backend-db-password:latest \
+    --set-secrets=DB_CONNECTION_NAME=backend-db-connection-name:latest \
+    --set-secrets=STRIPE_API_KEY=stripe-api-key:latest \
+    --set-secrets=STRIPE_PUBLISHABLE_KEY=stripe-publishable-key:latest \
+    --set-secrets=STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest \
+    --set-env-vars=DB_USER=app_user \
+    --set-env-vars=DB_NAME=ai_telephony \
+    --set-env-vars=GCS_DASHBOARD_BUCKET=ai-telephony-dash-poc-mpf-dmxmytcubly9 \
+    --set-env-vars=STRIPE_USE_STUB=false \
+    --set-env-vars=STRIPE_VERIFY_SIGNATURES=true \
+    --set-env-vars=STRIPE_PRICE_BASIC=price_basic_test \
+    --set-env-vars=STRIPE_PRICE_GROWTH=price_growth_test \
+    --set-env-vars=STRIPE_PRICE_SCALE=price_scale_test \
+    --set-env-vars=STRIPE_PAYMENT_LINK_URL=https://buy.stripe.com/test_28E28kfa82sPc3m2zxfYY00 \
+    --set-env-vars=STRIPE_BILLING_PORTAL_URL=https://billing.stripe.com/p/login/test_28E28kfa82sPc3m2zxfYY00 \
+    --vpc-connector=cr-default --vpc-egress=private-ranges-only
+  ```
+
 
 3. Core Use Cases
 -----------------
