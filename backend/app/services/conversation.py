@@ -9,12 +9,18 @@ from .calendar import TimeSlot, calendar_service
 from .stt_tts import speech_service  # noqa: F401  (re-exported for voice router)
 from .sessions import CallSession
 from .sms import sms_service
-from .nlu import parse_address, parse_name, classify_intent
+from .nlu import (
+    parse_address,
+    parse_name,
+    classify_intent,
+    classify_intent_with_metadata,
+)
 from . import subscription as subscription_service
+from ..config import get_settings
 from ..db import SQLALCHEMY_AVAILABLE, SessionLocal
 from ..db_models import BusinessDB
 from ..metrics import metrics
-from ..repositories import appointments_repo, customers_repo
+from ..repositories import appointments_repo, customers_repo, conversations_repo
 from ..business_config import (
     get_calendar_id_for_business,
     get_language_for_business,
@@ -37,6 +43,24 @@ EMERGENCY_KEYWORDS = [
     "backup",
     "gas leak",
 ]
+
+
+def _intent_threshold_for_business(business_id: str | None) -> float:
+    settings = get_settings()
+    default_threshold = getattr(settings.nlu, "intent_confidence_threshold", 0.35)
+    if not business_id or not (SQLALCHEMY_AVAILABLE and SessionLocal is not None):
+        return float(default_threshold)
+    session = SessionLocal()
+    try:
+        row = session.get(BusinessDB, business_id)
+    finally:
+        session.close()
+    raw = getattr(row, "intent_threshold", None) if row is not None else None
+    try:
+        val = float(raw) if raw is not None else float(default_threshold)
+        return val / 100.0 if val > 1 else val
+    except Exception:
+        return float(default_threshold)
 
 DEFAULT_BUSINESS_NAME = "Bristol Plumbing"
 
@@ -283,18 +307,35 @@ class ConversationManager:
         session.updated_at = datetime.now(UTC)
         normalized = (text or "").strip()
         lower = normalized.lower()
-        if normalized:
-            try:
-                session.intent = await classify_intent(normalized)
-                if session.intent == "emergency":
-                    session.is_emergency = True
-            except Exception:
-                session.intent = session.intent or None
-
-        # Resolve language and business context up-front.
         business_id = (
             getattr(session, "business_id", "default_business") or "default_business"
         )
+        intent_meta = None
+        if normalized:
+            try:
+                intent_meta = await classify_intent_with_metadata(
+                    normalized, business_id
+                )
+                session.intent = intent_meta["intent"]
+                session.intent_confidence = intent_meta.get("confidence")
+            except Exception:
+                session.intent = session.intent or None
+                session.intent_confidence = getattr(session, "intent_confidence", None)
+        threshold = _intent_threshold_for_business(business_id)
+        if (
+            getattr(session, "intent_confidence", None) is not None
+            and session.intent_confidence < threshold
+        ):
+            session.intent = None
+        if session.intent == "emergency":
+            session.is_emergency = True
+        conv = conversations_repo.get_by_session(session.id)
+        if conv:
+            conversations_repo.set_intent(
+                conv.id, session.intent, getattr(session, "intent_confidence", None)
+            )
+
+        # Resolve language and business context up-front.
         language_code = get_language_for_business(business_id)
         business_name = _get_business_name(business_id)
         vertical = get_vertical_for_business(business_id).lower()

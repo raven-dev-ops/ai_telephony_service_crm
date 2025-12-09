@@ -24,6 +24,7 @@ class CallSession:
     requested_time: str | None = None
     is_emergency: bool = False
     intent: str | None = None
+    intent_confidence: float | None = None
     stage: str = "GREETING"
     status: str = "ACTIVE"
     business_id: str = "default_business"

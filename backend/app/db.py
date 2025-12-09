@@ -72,6 +72,36 @@ def get_db() -> Generator["Session", None, None]:
         db.close()
 
 
+def _should_reset_default_business() -> bool:
+    env = (os.getenv("ENVIRONMENT", "dev") or "").lower()
+    reset_flag = os.getenv("RESET_DEFAULT_TENANT_ON_START", "true").lower() != "false"
+    return reset_flag and env not in {"prod", "production"}
+
+
+def _reset_default_business(session) -> None:
+    """Ensure the reference tenant starts from a clean slate in dev/test."""
+    try:
+        row = session.get(BusinessDB, "default_business")
+    except Exception:
+        return
+    if not row:
+        return
+    row.owner_name = None
+    row.owner_email = None
+    row.owner_profile_image_url = None
+    row.owner_phone = None
+    row.service_tier = None
+    row.tts_voice = None
+    row.terms_accepted_at = None
+    row.privacy_accepted_at = None
+    row.onboarding_step = None
+    row.onboarding_completed = False
+    row.subscription_status = None
+    row.subscription_current_period_end = None
+    session.add(row)
+    session.commit()
+
+
 def init_db() -> None:
     if not SQLALCHEMY_AVAILABLE or engine is None:
         # Skip DB initialization when SQLAlchemy is unavailable (e.g., minimal test environments).
@@ -101,6 +131,11 @@ def init_db() -> None:
                         "ALTER TABLE businesses "
                         "ADD COLUMN IF NOT EXISTS twilio_phone_number VARCHAR(255)"
                     )
+                if "intent_threshold" not in cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE businesses "
+                        "ADD COLUMN IF NOT EXISTS intent_threshold INTEGER"
+                    )
                 # Patch users table for new auth fields when using Postgres.
                 result_users = conn.exec_driver_sql(
                     """
@@ -125,6 +160,23 @@ def init_db() -> None:
                 if "reset_token_expires_at" not in user_cols:
                     conn.exec_driver_sql(
                         "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires_at TIMESTAMP NULL"
+                    )
+                # Patch conversations for intent metadata.
+                result_conversations = conn.exec_driver_sql(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_name='conversations'
+                    """
+                )
+                conv_cols = {row[0] for row in result_conversations}
+                if "intent" not in conv_cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS intent VARCHAR(64)"
+                    )
+                if "intent_confidence" not in conv_cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS intent_confidence INTEGER"
                     )
                 conn.commit()
     except Exception:
@@ -256,6 +308,10 @@ def init_db() -> None:
                     conn.exec_driver_sql(
                         "ALTER TABLE businesses ADD COLUMN subscription_current_period_end TIMESTAMP NULL"
                     )
+                if "intent_threshold" not in cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE businesses ADD COLUMN intent_threshold INTEGER NULL"
+                    )
                 # Patch users table for new auth fields.
                 user_cols = []
                 user_result = conn.exec_driver_sql("PRAGMA table_info(users)")
@@ -276,6 +332,19 @@ def init_db() -> None:
                 if "reset_token_expires_at" not in user_cols:
                     conn.exec_driver_sql(
                         "ALTER TABLE users ADD COLUMN reset_token_expires_at TIMESTAMP NULL"
+                    )
+                # Patch conversations table for intent metadata.
+                conv_cols = []
+                conv_result = conn.exec_driver_sql("PRAGMA table_info(conversations)")
+                for row in conv_result:
+                    conv_cols.append(str(row[1]))
+                if "intent" not in conv_cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE conversations ADD COLUMN intent VARCHAR(64) NULL"
+                    )
+                if "intent_confidence" not in conv_cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE conversations ADD COLUMN intent_confidence INTEGER NULL"
                     )
                 conn.commit()
             # Create user and business_users tables if missing (SQLite only).
@@ -342,5 +411,7 @@ def init_db() -> None:
                 )
             )
             session.commit()
+        if _should_reset_default_business() and str(engine.url).startswith("sqlite"):
+            _reset_default_business(session)
     finally:
         session.close()

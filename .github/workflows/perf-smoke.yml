@@ -25,4 +25,4 @@ jobs:
         env:
           PYTEST_ADDOPTS: "-q"
         run: |
-          pytest tests/test_perf_smoke.py tests/test_perf_multitenant_smoke.py tests/test_perf_transcript_smoke.py
+          pytest tests/test_perf_smoke.py tests/test_perf_multitenant_smoke.py tests/test_perf_transcript_smoke.py tests/test_twilio_streaming_canary.py

@@ -44,6 +44,7 @@ if SQLALCHEMY_AVAILABLE:
         )  # type: ignore[call-arg]
         travel_buffer_minutes = Column(Integer, nullable=True)  # type: ignore[call-arg]
         twilio_missed_statuses = Column(String, nullable=True)  # type: ignore[call-arg]
+        intent_threshold = Column(Integer, nullable=True)  # type: ignore[call-arg]
         created_at = Column(DateTime, nullable=False, default=_utcnow, index=True)  # type: ignore[call-arg]
         widget_token = Column(String, nullable=True, index=True)  # type: ignore[call-arg]
         retention_enabled = Column(Boolean, nullable=True, default=True)  # type: ignore[call-arg]
@@ -155,6 +156,8 @@ if SQLALCHEMY_AVAILABLE:
         session_id = Column(String, nullable=True, index=True)  # type: ignore[call-arg]
         business_id = Column(String, nullable=False, index=True)  # type: ignore[call-arg]
         created_at = Column(DateTime, nullable=False, default=_utcnow, index=True)  # type: ignore[call-arg]
+        intent = Column(String, nullable=True)  # type: ignore[call-arg]
+        intent_confidence = Column(Integer, nullable=True)  # type: ignore[call-arg]
 
     class ConversationMessageDB(Base):  # type: ignore[misc]
         __tablename__ = "conversation_messages"
@@ -217,6 +220,7 @@ else:  # pragma: no cover - for environments without SQLAlchemy
         widget_token: str
         status: str
         twilio_phone_number: str | None
+        intent_threshold: int | None
 
     class UserDB:  # type: ignore[misc]
         __tablename__ = "users"
@@ -261,6 +265,8 @@ else:  # pragma: no cover - for environments without SQLAlchemy
         __tablename__ = "conversations"
         id: str
         business_id: str
+        intent: str | None
+        intent_confidence: int | None
 
     class ConversationMessageDB:  # type: ignore[misc]
         __tablename__ = "conversation_messages"

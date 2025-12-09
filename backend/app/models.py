@@ -65,6 +65,8 @@ class Conversation:
     tags: List[str] = field(default_factory=list)
     outcome: Optional[str] = None
     notes: Optional[str] = None
+    intent: Optional[str] = None
+    intent_confidence: Optional[float] = None
     messages: List["ConversationMessage"] = field(default_factory=list)
 
 

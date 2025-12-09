@@ -38,6 +38,13 @@ class SpeechSettings(BaseModel):
     openai_chat_model: str = "gpt-4o-mini"
 
 
+class NluSettings(BaseModel):
+    intent_provider: str = os.getenv("NLU_PROVIDER", "heuristic")
+    intent_confidence_threshold: float = float(
+        os.getenv("NLU_INTENT_THRESHOLD", "0.35")
+    )
+
+
 class OAuthSettings(BaseModel):
     redirect_base: str = os.getenv("OAUTH_REDIRECT_BASE", "http://localhost:8000/auth")
     state_secret: str = os.getenv("AUTH_STATE_SECRET", "dev-secret")
@@ -70,6 +77,13 @@ class SmsSettings(BaseModel):
     # When unset, Twilio's default language for the chosen voice is used.
     twilio_say_language_default: str | None = None
     twilio_say_language_es: str | None = "es-US"
+
+
+class TelephonySettings(BaseModel):
+    twilio_streaming_enabled: bool = (
+        os.getenv("TWILIO_STREAMING_ENABLED", "false").lower() == "true"
+    )
+    twilio_stream_base_url: str | None = os.getenv("TWILIO_STREAM_BASE_URL")
 
 
 class QuickBooksSettings(BaseModel):
@@ -117,8 +131,10 @@ class AppSettings(BaseModel):
     auth: AuthSettings = AuthSettings()
     calendar: CalendarSettings = CalendarSettings()
     speech: SpeechSettings = SpeechSettings()
+    nlu: NluSettings = NluSettings()
     oauth: OAuthSettings = OAuthSettings()
     sms: SmsSettings = SmsSettings()
+    telephony: TelephonySettings = TelephonySettings()
     quickbooks: QuickBooksSettings = QuickBooksSettings()
     stripe: StripeSettings = StripeSettings()
     admin_api_key: str | None = None
@@ -197,6 +213,12 @@ class AppSettings(BaseModel):
             openai_stt_model=os.getenv("OPENAI_STT_MODEL", "gpt-4o-mini-transcribe"),
             openai_chat_model=os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini"),
         )
+        nlu = NluSettings(
+            intent_provider=os.getenv("NLU_PROVIDER", "heuristic"),
+            intent_confidence_threshold=float(
+                os.getenv("NLU_INTENT_THRESHOLD", "0.35")
+            ),
+        )
         oauth = OAuthSettings(
             redirect_base=os.getenv(
                 "OAUTH_REDIRECT_BASE", "http://localhost:8000/auth"
@@ -232,6 +254,11 @@ class AppSettings(BaseModel):
             == "true",
             twilio_say_language_default=os.getenv("TWILIO_SAY_LANGUAGE_DEFAULT"),
             twilio_say_language_es=os.getenv("TWILIO_SAY_LANGUAGE_ES", "es-US"),
+        )
+        telephony = TelephonySettings(
+            twilio_streaming_enabled=os.getenv("TWILIO_STREAMING_ENABLED", "false").lower()
+            == "true",
+            twilio_stream_base_url=os.getenv("TWILIO_STREAM_BASE_URL"),
         )
         quickbooks = QuickBooksSettings(
             client_id=os.getenv("QBO_CLIENT_ID"),
@@ -318,8 +345,10 @@ class AppSettings(BaseModel):
             auth=auth,
             calendar=calendar,
             speech=speech,
+            nlu=nlu,
             oauth=oauth,
             sms=sms,
+            telephony=telephony,
             quickbooks=quickbooks,
             stripe=stripe,
             admin_api_key=admin_api_key,

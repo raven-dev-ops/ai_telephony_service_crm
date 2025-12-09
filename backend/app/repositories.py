@@ -242,6 +242,8 @@ class InMemoryConversationRepository:
             customer_id=customer_id,
             session_id=session_id,
             business_id=business_id,
+            intent=None,
+            intent_confidence=None,
         )
         self._by_id[conv.id] = conv
         if session_id:
@@ -263,6 +265,16 @@ class InMemoryConversationRepository:
         if not conv:
             return
         conv.messages.append(ConversationMessage(role=role, text=text))
+
+    def set_intent(
+        self, conversation_id: str, intent: str | None, confidence: float | None
+    ) -> None:
+        conv = self._by_id.get(conversation_id)
+        if not conv:
+            return
+        conv.intent = intent
+        conv.intent_confidence = confidence
+        self._by_id[conversation_id] = conv
 
     def list_all(self) -> List[Conversation]:
         return list(self._by_id.values())
@@ -628,6 +640,15 @@ class DbConversationRepository:
     def _to_model(
         self, row: ConversationDB, messages: List[ConversationMessageDB]
     ) -> Conversation:
+        raw_conf = getattr(row, "intent_confidence", None)
+        conf_val: float | None = None
+        try:
+            if raw_conf is not None:
+                conf_val = float(raw_conf)
+                if conf_val > 1:
+                    conf_val = conf_val / 100.0
+        except Exception:
+            conf_val = None
         return Conversation(
             id=row.id,
             channel=row.channel,
@@ -635,6 +656,8 @@ class DbConversationRepository:
             session_id=row.session_id,
             business_id=row.business_id,
             created_at=row.created_at,
+            intent=getattr(row, "intent", None),
+            intent_confidence=conf_val,
             messages=[
                 ConversationMessage(role=m.role, text=m.text, timestamp=m.timestamp)
                 for m in messages
@@ -658,6 +681,8 @@ class DbConversationRepository:
                 customer_id=customer_id,
                 session_id=session_id,
                 business_id=business_id,
+                intent=None,
+                intent_confidence=None,
             )  # type: ignore[call-arg]
             session.add(row)
             session.commit()
@@ -720,6 +745,26 @@ class DbConversationRepository:
                 text=text,
             )  # type: ignore[call-arg]
             session.add(msg)
+            session.commit()
+        finally:
+            session.close()
+
+    def set_intent(
+        self, conversation_id: str, intent: str | None, confidence: float | None
+    ) -> None:
+        if SessionLocal is None:
+            raise RuntimeError("Database session factory is not available")
+        session = SessionLocal()
+        try:
+            row = session.get(ConversationDB, conversation_id)
+            if not row:
+                return
+            row.intent = intent  # type: ignore[assignment]
+            if confidence is None:
+                row.intent_confidence = None  # type: ignore[assignment]
+            else:
+                row.intent_confidence = int(round(confidence * 100))  # type: ignore[assignment]
+            session.add(row)
             session.commit()
         finally:
             session.close()

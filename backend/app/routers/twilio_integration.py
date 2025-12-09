@@ -8,6 +8,7 @@ from html import escape
 import logging
 
 from fastapi import APIRouter, Form, HTTPException, Query, Request, Response, status
+from pydantic import BaseModel
 from typing import Dict, TYPE_CHECKING
 
 from ..config import get_settings
@@ -35,6 +36,23 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+class TwilioStreamEvent(BaseModel):
+    call_sid: str
+    stream_sid: str | None = None
+    event: str
+    transcript: str | None = None
+    business_id: str | None = None
+    lead_source: str | None = None
+    from_number: str | None = None
+
+
+class TwilioStreamResponse(BaseModel):
+    status: str
+    session_id: str | None = None
+    reply_text: str | None = None
+    completed: bool = False
 
 
 async def _maybe_verify_twilio_signature(
@@ -129,6 +147,32 @@ def _twilio_say_language_attr(language_code: str) -> str:
     if not lang:
         return ""
     return f' language="{lang}"'
+
+
+def _build_stream_url(
+    request: Request,
+    call_sid: str,
+    business_id: str,
+    lead_source: str | None,
+) -> str:
+    """Return the WebSocket URL Twilio should stream audio to.
+
+    Uses TWILIO_STREAM_BASE_URL when provided; otherwise builds a ws/wss URL
+    from the inbound request host.
+    """
+    settings = get_settings()
+    base = getattr(settings, "telephony", None)
+    stream_base = getattr(base, "twilio_stream_base_url", None) if base else None
+    if stream_base:
+        url = stream_base
+    else:
+        scheme = "wss" if request.url.scheme == "https" else "ws"
+        url = f"{scheme}://{request.url.netloc}/v1/twilio/voice-stream"
+    sep = "&" if "?" in url else "?"
+    url = f"{url}{sep}call_sid={call_sid}&business_id={business_id}"
+    if lead_source:
+        url = f"{url}&lead_source={lead_source}"
+    return url
 
 
 def _find_next_appointment_for_phone(
@@ -921,6 +965,8 @@ async def twilio_voice_assistant(
       return another Gather with the reply spoken via <Say>.
     """
     business_id = business_id_param or DEFAULT_BUSINESS_ID
+    settings = get_settings()
+    stream_enabled = bool(getattr(settings.telephony, "twilio_streaming_enabled", False))
     metrics.twilio_voice_requests += 1
     per_tenant = metrics.twilio_by_business.setdefault(
         business_id, BusinessTwilioMetrics()
@@ -996,6 +1042,20 @@ async def twilio_voice_assistant(
                     await sms_service.notify_owner(body, business_id=business_id)
                 except Exception:
                     logger.warning("owner_notify_failed", exc_info=True, extra={"business_id": business_id})
+        if stream_enabled:
+            stream_url = _build_stream_url(
+                request, CallSid, business_id, lead_source_param
+            )
+            safe_reply = escape(reply_text or "Connecting you to the assistant.")
+            twiml = f"""
+<Response>
+  <Start>
+    <Stream url="{stream_url}" />
+  </Start>
+  <Say voice="alice"{say_language_attr}>{safe_reply}</Say>
+</Response>
+""".strip()
+            return Response(content=twiml, media_type="text/xml")
         if business_id_param:
             gather_action = f"/twilio/voice-assistant?business_id={business_id}"
         else:
@@ -1022,6 +1082,89 @@ async def twilio_voice_assistant(
 </Response>
 """.strip()
         return Response(content=twiml, media_type="text/xml")
+
+
+@router.post("/voice-stream", response_model=TwilioStreamResponse)
+async def twilio_voice_stream(
+    payload: TwilioStreamEvent,
+) -> TwilioStreamResponse:
+    """Handle Twilio media stream events and route transcripts to the assistant."""
+    settings = get_settings()
+    if not getattr(settings.telephony, "twilio_streaming_enabled", False):
+        return TwilioStreamResponse(
+            status="disabled", session_id=None, reply_text=None, completed=True
+        )
+
+    business_id = payload.business_id or DEFAULT_BUSINESS_ID
+    metrics.twilio_voice_requests += 1
+    per_tenant = metrics.twilio_by_business.setdefault(
+        business_id, BusinessTwilioMetrics()
+    )
+    per_tenant.voice_requests += 1
+
+    link = twilio_state_store.get_call_session(payload.call_sid)
+    session_obj = sessions.session_store.get(link.session_id) if link else None
+    if not session_obj:
+        session_obj = sessions.session_store.create(
+            caller_phone=payload.from_number,
+            business_id=business_id,
+            lead_source=payload.lead_source,
+        )
+        twilio_state_store.set_call_session(payload.call_sid, session_obj.id)
+        customer = (
+            customers_repo.get_by_phone(payload.from_number, business_id=business_id)
+            if payload.from_number
+            else None
+        )
+        conversations_repo.create(
+            channel="phone",
+            customer_id=customer.id if customer else None,
+            session_id=session_obj.id,
+            business_id=business_id,
+        )
+
+    event = (payload.event or "").lower()
+    if event == "stop":
+        twilio_state_store.clear_call_session(payload.call_sid)
+        sessions.session_store.end(session_obj.id)
+        return TwilioStreamResponse(
+            status="completed",
+            session_id=session_obj.id,
+            reply_text=None,
+            completed=True,
+        )
+
+    conv = conversations_repo.get_by_session(session_obj.id)
+    transcript = (payload.transcript or "").strip()
+    reply_text: str | None = None
+    if event in {"start", "connected"} and not transcript:
+        result = await conversation.conversation_manager.handle_input(
+            session_obj, None
+        )
+        reply_text = result.reply_text
+        if conv:
+            conversations_repo.append_message(
+                conv.id, role="assistant", text=reply_text
+            )
+    elif transcript:
+        if conv:
+            conversations_repo.append_message(
+                conv.id, role="user", text=transcript
+            )
+        result = await conversation.conversation_manager.handle_input(
+            session_obj, transcript
+        )
+        reply_text = result.reply_text
+        if conv:
+            conversations_repo.append_message(
+                conv.id, role="assistant", text=reply_text
+            )
+    return TwilioStreamResponse(
+        status="ok",
+        session_id=session_obj.id,
+        reply_text=reply_text,
+        completed=False,
+    )
 
 
 @router.post("/sms", response_class=Response)

@@ -111,70 +111,94 @@ INTENT_LABELS = [
 ]
 
 
-def _heuristic_intent(text: str) -> str:
+def _heuristic_intent_with_score(text: str) -> tuple[str, float]:
     """Deterministic, keyword-driven intent classifier."""
     lower = (text or "").lower()
     if not lower:
-        return "greeting"
+        return "greeting", 0.4
     if any(k in lower for k in ["burst", "flood", "sewage", "gas leak", "no water"]):
-        return "emergency"
+        return "emergency", 0.95
     if any(k in lower for k in ["cancel", "canceling", "cancelling"]):
-        return "cancel"
+        return "cancel", 0.85
     if "resched" in lower or "change my time" in lower:
-        return "reschedule"
+        return "reschedule", 0.85
     if any(k in lower for k in ["book", "schedule", "appointment", "available", "tomorrow"]):
-        return "schedule"
+        return "schedule", 0.8
     if any(k in lower for k in ["hours", "pricing", "quote", "estimate", "warranty", "guarantee"]):
-        return "faq"
+        return "faq", 0.65
     if lower.strip() in {"hi", "hello", "hey"}:
-        return "greeting"
+        return "greeting", 0.45
     if lower.endswith("?"):
-        return "faq"
-    return "other"
+        return "faq", 0.55
+    return "other", 0.4
 
 
-async def classify_intent(text: str) -> str:
-    """Classify user intent with heuristics and optional LLM fallback.
-
-    Returns one of INTENT_LABELS and always falls back to deterministic
-    heuristics for safety.
-    """
-    base = _heuristic_intent(text)
+async def _classify_with_llm(text: str) -> str | None:
+    """LLM intent classifier for deployments that configure OpenAI."""
     settings = get_settings()
     speech = settings.speech
     if speech.provider != "openai" or not speech.openai_api_key:
-        return base
+        return None
 
-    system_prompt = (
-        "You classify caller utterances into intents for a plumbing booking assistant. "
-        "Allowed intents: emergency, schedule, reschedule, cancel, faq, greeting, other. "
-        "Return only the intent label."
-    )
-    payload = {
-        "model": speech.openai_chat_model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": (text or "").strip()},
-        ],
-        "temperature": 0,
-        "max_tokens": 4,
-    }
-    headers = {
-        "Authorization": f"Bearer {speech.openai_api_key}",
-        "Content-Type": "application/json",
-    }
-    url = f"{speech.openai_api_base}/chat/completions"
     try:
         timeout = httpx.Timeout(6.0, connect=4.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
+            system_prompt = (
+                "You classify caller utterances into intents for a plumbing booking assistant. "
+                "Allowed intents: emergency, schedule, reschedule, cancel, faq, greeting, other. "
+                "Return only the intent label."
+            )
+            payload = {
+                "model": speech.openai_chat_model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": (text or "").strip()},
+                ],
+                "temperature": 0,
+                "max_tokens": 4,
+            }
+            headers = {
+                "Authorization": f"Bearer {speech.openai_api_key}",
+                "Content-Type": "application/json",
+            }
+            url = f"{speech.openai_api_base}/chat/completions"
             resp = await client.post(url, json=payload, headers=headers)
             resp.raise_for_status()
             data = resp.json()
             choice = data.get("choices", [{}])[0]
             content = choice.get("message", {}).get("content", "") or ""
             label = content.strip().split()[0].lower()
-            if label in INTENT_LABELS:
-                return label
+            return label if label in INTENT_LABELS else None
     except Exception:
         logger.debug("intent_llm_fallback_failed", exc_info=True)
-    return base
+    return None
+
+
+async def classify_intent_with_metadata(
+    text: str, business_id: str | None = None
+) -> dict:
+    """Return intent label with confidence and provider metadata."""
+    intent, confidence = _heuristic_intent_with_score(text)
+    chosen_provider = "heuristic"
+    settings = get_settings()
+    provider = getattr(settings.nlu, "intent_provider", "heuristic").lower()
+
+    if provider == "openai":
+        llm_label = await _classify_with_llm(text)
+        if llm_label:
+            intent = llm_label
+            confidence = max(confidence, 0.85)
+            chosen_provider = "openai"
+
+    return {
+        "intent": intent,
+        "confidence": float(confidence),
+        "provider": chosen_provider,
+        "business_id": business_id,
+    }
+
+
+async def classify_intent(text: str) -> str:
+    """Backward-compatible intent classifier that returns only the label."""
+    meta = await classify_intent_with_metadata(text, None)
+    return meta["intent"]
