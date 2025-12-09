@@ -1120,6 +1120,27 @@
           <button id="refresh-owner-kpis" type="button" style="margin-top: 1rem; width: 100%;" data-i18n="kpi_refresh">Refresh KPIs</button>
         </div>
 
+        <!-- QuickBooks Link & Pending -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2C6.48 2 2 5.58 2 10c0 2.94 1.94 5.51 4.9 7.02-.21.74-.79 2.75-.9 3.18 0 0-.02.17.09.23.11.05.25.02.25.02.33-.05 2.15-1.41 2.49-1.66.68.1 1.38.16 2.08.16 5.52 0 10-3.58 10-8s-4.48-8-10-8z"/>
+              </svg>
+            </div>
+            <h2>QuickBooks Link & Approvals</h2>
+          </div>
+          <div id="owner-qbo-content">
+            <div class="loading">Loading QuickBooks status…</div>
+          </div>
+          <div class="button-row" style="margin-top: 1rem;">
+            <button id="owner-qbo-connect" type="button">Link QuickBooks</button>
+            <button id="owner-qbo-refresh" type="button" class="secondary">Refresh</button>
+            <button id="owner-qbo-notify" type="button" class="secondary">Notify owner</button>
+          </div>
+          <small id="owner-qbo-status" class="muted"></small>
+        </div>
+
         <!-- Today's Summary -->
         <div class="card">
           <div class="card-header">
@@ -2011,6 +2032,99 @@
         }
       }
 
+      async function loadOwnerQbo() {
+        const content = document.getElementById("owner-qbo-content");
+        const statusEl = document.getElementById("owner-qbo-status");
+        if (!content) return;
+        content.innerHTML = '<div class="loading">Loading QuickBooks status…</div>';
+        if (statusEl) statusEl.textContent = "";
+        try {
+          const [summary, pending] = await Promise.all([
+            fetchJson("/v1/owner/qbo/summary"),
+            fetchJson("/v1/owner/qbo/pending"),
+          ]);
+          const badge = summary.connected
+            ? '<span class="status-badge success">Connected</span>'
+            : '<span class="status-badge warning">Not connected</span>';
+          const pendingItems = (pending.items || []).slice(0, 5);
+          const pendingHtml =
+            pendingItems.length > 0
+              ? pendingItems
+                  .map(
+                    (item) => `
+              <div class="usage-row">
+                <div class="usage-cell strong">${escapeHtml(item.customer_name || "Customer")}</div>
+                <div class="usage-cell">${escapeHtml(item.service_type || "Service")} • ${escapeHtml(item.quote_status || "pending")}</div>
+                <div class="usage-cell">$${formatNumber(item.quoted_value || 0)}</div>
+              </div>
+            `
+                  )
+                  .join("")
+              : '<div class="muted">No pending approvals.</div>';
+          content.innerHTML = `
+            <div class="info-grid">
+              <div>
+                <div class="info-label">Status</div>
+                <div class="info-value">${badge}</div>
+                <div class="info-sub">${summary.connected ? "Realm: " + escapeHtml(summary.realm_id || "unknown") : "Not linked"}</div>
+              </div>
+              <div>
+                <div class="info-label">Pending approvals</div>
+                <div class="info-value">${formatNumber(summary.pending_count || 0)}</div>
+                <div class="info-sub">Items waiting to sync to QuickBooks</div>
+              </div>
+            </div>
+            <div style="margin-top: 0.75rem;">
+              <div class="info-label">Pending items (latest)</div>
+              ${pendingHtml}
+            </div>
+          `;
+          if (statusEl) {
+            statusEl.textContent = summary.connected
+              ? `Connected to QuickBooks${summary.realm_id ? " (" + summary.realm_id + ")" : ""}`
+              : "Not connected to QuickBooks yet.";
+          }
+        } catch (err) {
+          content.innerHTML = `<div class="error">Unable to load QuickBooks status.</div>`;
+          if (statusEl) statusEl.textContent = err.message || "Error loading QuickBooks status.";
+        }
+      }
+
+      async function notifyOwnerQbo() {
+        const statusEl = document.getElementById("owner-qbo-status");
+        if (statusEl) statusEl.textContent = "Sending QBO notification…";
+        try {
+          const res = await fetch(backendBase + "/v1/owner/qbo/notify", {
+            method: "POST",
+            headers: { ...authHeaders(), "Content-Type": "application/json" },
+            body: JSON.stringify({ send_sms: true, send_email: false }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.detail || "Notify failed");
+          }
+          if (statusEl) statusEl.textContent = "Notification sent to owner.";
+        } catch (err) {
+          if (statusEl) statusEl.textContent = "Unable to notify: " + (err.message || err);
+        }
+      }
+
+      async function connectOwnerQbo() {
+        const statusEl = document.getElementById("owner-qbo-status");
+        if (statusEl) statusEl.textContent = "Opening QuickBooks authorization…";
+        try {
+          const data = await fetchJson("/v1/integrations/qbo/authorize");
+          if (data && data.authorization_url) {
+            window.open(data.authorization_url, "_blank");
+            if (statusEl) statusEl.textContent = "Complete QuickBooks OAuth in the new tab, then refresh.";
+          } else {
+            if (statusEl) statusEl.textContent = "Authorization URL not available.";
+          }
+        } catch (err) {
+          if (statusEl) statusEl.textContent = "Unable to start QuickBooks OAuth.";
+        }
+      }
+
       async function loadTodaySummary() {
         const el = document.getElementById("today-summary-content");
         if (!el) return;
@@ -2325,6 +2439,7 @@
 
       function refreshAllData() {
         loadOwnerKpis();
+        loadOwnerQbo();
         loadTodaySummary();
         loadSchedule();
         loadEmergencyJobs();
@@ -2932,6 +3047,9 @@
 
       function initButtons() {
         document.getElementById("refresh-owner-kpis")?.addEventListener("click", loadOwnerKpis);
+        document.getElementById("owner-qbo-refresh")?.addEventListener("click", loadOwnerQbo);
+        document.getElementById("owner-qbo-notify")?.addEventListener("click", notifyOwnerQbo);
+        document.getElementById("owner-qbo-connect")?.addEventListener("click", connectOwnerQbo);
         document.getElementById("refresh-today-summary")?.addEventListener("click", loadTodaySummary);
         document.getElementById("refresh-schedule")?.addEventListener("click", loadSchedule);
         document.getElementById("refresh-emergencies")?.addEventListener("click", loadEmergencyJobs);

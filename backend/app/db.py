@@ -110,6 +110,10 @@ def init_db() -> None:
                     conn.exec_driver_sql(
                         "ALTER TABLE businesses ADD COLUMN median_household_income INTEGER NULL"
                     )
+                if "twilio_phone_number" not in cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE businesses ADD COLUMN twilio_phone_number VARCHAR(255) NULL"
+                    )
                 if "owner_name" not in cols:
                     conn.exec_driver_sql(
                         "ALTER TABLE businesses ADD COLUMN owner_name VARCHAR(255) NULL"

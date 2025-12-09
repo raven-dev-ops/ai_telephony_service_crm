@@ -242,6 +242,13 @@ def create_app() -> FastAPI:
     app.include_router(twilio_integration.router, prefix="/twilio", tags=["twilio"])
     app.include_router(twilio_integration.router, prefix="/v1/twilio", tags=["twilio"])
     app.include_router(public_signup.router, tags=["public-signup"])
+    # Fallback endpoint without prefix to satisfy external callback requirements.
+    app.add_api_route(
+        "/fallback",
+        twilio_integration.twilio_fallback,
+        methods=["GET", "POST"],
+        tags=["twilio"],
+    )
 
     @app.get("/healthz", tags=["health"])
     async def health_check() -> dict:

@@ -444,6 +444,33 @@
             <div class="action-card">
               <div class="integration-header">
                 <div>
+                  <div style="font-weight: 600; font-size: 0.95rem;">Twilio Toll-Free / Hosted SMS</div>
+                  <div class="muted" style="font-size: 0.8rem;">
+                    Attach an existing number or auto-purchase a toll-free number and wire webhooks to the assistant.
+                  </div>
+                </div>
+                <span class="badge pill disconnected" id="twilio-provision-badge">Not connected</span>
+              </div>
+              <div class="muted" style="font-size: 0.8rem;">
+                Current number: <span class="pill" id="twilio-current-number">Not set</span>
+              </div>
+              <div class="input-compact">
+                <label for="twilio-webhook-base">Webhook base URL</label>
+                <input id="twilio-webhook-base" type="url" placeholder="https://api.example.com" />
+              </div>
+              <div class="input-compact">
+                <label for="twilio-existing-number">Existing Twilio/Hosted SMS number (optional)</label>
+                <input id="twilio-existing-number" type="tel" placeholder="+18445551234" />
+              </div>
+              <div class="button-row" style="margin-top: 0.25rem;">
+                <button id="twilio-attach-btn" type="button" class="button-secondary">Attach existing number</button>
+                <button id="twilio-purchase-btn" type="button">Purchase toll-free in Twilio</button>
+              </div>
+              <div id="twilio-provision-status" class="status info"></div>
+            </div>
+            <div class="action-card">
+              <div class="integration-header">
+                <div>
                   <div style="font-weight: 600; font-size: 0.95rem;">CSV Contact Import</div>
                   <div class="muted" style="font-size: 0.8rem;">Upload a CSV during onboarding instead of QBO.</div>
                 </div>
@@ -574,6 +601,7 @@
 
         // Integrations and voice
         renderIntegrations();
+        updateTwilioProvisionUI();
         renderVoices();
         loadQboStatus();
 
@@ -587,6 +615,7 @@
         }
       }
 
+      
       function renderIntegrations() {
         const grid = $("integration-grid");
         if (!grid) return;
@@ -595,30 +624,39 @@
           grid.innerHTML = '<div class="muted">No integration metadata available yet.</div>';
           return;
         }
-        grid.innerHTML = items.map((item) => {
-          const provider = item.provider;
-          const connected = !!item.connected;
-          const label = item.label || provider;
-          const badgeClass = connected ? "badge connected" : "badge disconnected";
-          const badgeText = connected ? "Connected" : "Not connected";
-          const buttonLabel = connected ? "Mark as disconnected" : "Mark as connected";
-          return `
-            <div class="integration-card" data-provider="${provider}">
-              <div class="integration-header">
-                <div>
-                  <div style="font-weight: 600; font-size: 0.9rem;">${label}</div>
-                  <div class="muted" style="font-size: 0.75rem;">Business account only â€“ OAuth handled by your deployment.</div>
+        grid.innerHTML = items
+          .map((item) => {
+            const provider = item.provider;
+            const connected = !!item.connected;
+            const label = item.label || provider;
+            const badgeClass = connected ? "badge connected" : "badge disconnected";
+            const badgeText = connected ? "Connected" : "Not connected";
+            const buttonLabel = connected ? "Mark as disconnected" : "Mark as connected";
+            const twilioMeta =
+              provider === "twilio"
+                ? `<div class="muted" style="font-size: 0.75rem;">Number: ${
+                    onboardingProfile?.twilio_phone_number || "Not set"
+                  }</div>`
+                : "";
+            return `
+              <div class="integration-card" data-provider="${provider}">
+                <div class="integration-header">
+                  <div>
+                    <div style="font-weight: 600; font-size: 0.9rem;">${label}</div>
+                    <div class="muted" style="font-size: 0.75rem;">Business account only -- OAuth handled by your deployment.</div>
+                  </div>
+                  <span class="${badgeClass}">${badgeText}</span>
                 </div>
-                <span class="${badgeClass}">${badgeText}</span>
+                ${twilioMeta}
+                <div class="button-row" style="margin-top: 0.5rem;">
+                  <button type="button" class="button-secondary" data-integration-toggle="${provider}">
+                    ${buttonLabel}
+                  </button>
+                </div>
               </div>
-              <div class="button-row" style="margin-top: 0.5rem;">
-                <button type="button" class="button-secondary" data-integration-toggle="${provider}">
-                  ${buttonLabel}
-                </button>
-              </div>
-            </div>
-          `;
-        }).join("");
+            `;
+          })
+          .join("");
 
         grid.querySelectorAll("[data-integration-toggle]").forEach((btn) => {
           btn.addEventListener("click", async () => {
@@ -627,6 +665,57 @@
             await toggleIntegration(provider);
           });
         });
+      }
+
+      function updateTwilioProvisionUI() {
+        const badge = $("twilio-provision-badge");
+        const numberEl = $("twilio-current-number");
+        const twilioIntegration = (onboardingProfile?.integrations || []).find((i) => i.provider === "twilio");
+        const connected = !!twilioIntegration?.connected;
+        const num = onboardingProfile?.twilio_phone_number || "Not set";
+        if (badge) {
+          badge.textContent = connected ? "Connected" : "Not connected";
+          badge.className = "badge pill " + (connected ? "connected" : "disconnected");
+        }
+        if (numberEl) {
+          numberEl.textContent = num;
+          numberEl.className = "pill" + (connected ? " connected" : "");
+        }
+      }
+
+      async function provisionTwilio(purchaseNew) {
+        const backendBase = DEFAULT_BACKEND_BASE;
+        const webhookBase = $("twilio-webhook-base")?.value.trim() || null;
+        const existingNumber = $("twilio-existing-number")?.value.trim() || null;
+        if (!purchaseNew && !existingNumber) {
+          setStatus("twilio-provision-status", "Enter a number to attach, or purchase a new toll-free number.", "error");
+          return;
+        }
+        const payload = {
+          purchase_new: !!purchaseNew,
+          phone_number: purchaseNew ? null : existingNumber,
+          webhook_base_url: webhookBase || null,
+          friendly_name: onboardingProfile?.business_name ? `${onboardingProfile.business_name}-owner-line` : null,
+        };
+        setStatus("twilio-provision-status", "Working...", "info");
+        try {
+          const res = await fetch(backendBase + "/v1/owner/twilio/provision", {
+            method: "POST",
+            headers: authHeaders(),
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            setStatus("twilio-provision-status", data.detail || data.message || "Provisioning failed.", "error");
+            return;
+          }
+          const statusType = data.status === "error" ? "error" : "success";
+          setStatus("twilio-provision-status", data.message || "Updated.", statusType);
+          await loadOnboardingProfile();
+        } catch (err) {
+          console.error("Error provisioning Twilio number", err);
+          setStatus("twilio-provision-status", "Network error while provisioning.", "error");
+        }
       }
 
       function renderVoices() {
@@ -1022,6 +1111,8 @@
           await markOnboardingStep("ai");
           setStep(5);
         });
+        $("twilio-attach-btn")?.addEventListener("click", () => provisionTwilio(false));
+        $("twilio-purchase-btn")?.addEventListener("click", () => provisionTwilio(true));
         $("qbo-connect-btn")?.addEventListener("click", connectQbo);
         $("qbo-simulate-btn")?.addEventListener("click", simulateQboCallback);
         $("qbo-sync-btn")?.addEventListener("click", syncQbo);

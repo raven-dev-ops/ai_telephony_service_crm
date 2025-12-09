@@ -1157,3 +1157,37 @@ async def twilio_sms(
 </Response>
 """.strip()
         return Response(content=twiml, media_type="text/xml")
+
+
+@router.post("/status-callback")
+async def twilio_status_callback(request: Request) -> dict:
+    """Capture Twilio delivery status callbacks for observability."""
+    form_params = await request.form()
+    await _maybe_verify_twilio_signature(request, form_params)
+    message_sid = form_params.get("MessageSid")
+    message_status = form_params.get("MessageStatus")
+    to = form_params.get("To")
+    from_ = form_params.get("From")
+    error_code = form_params.get("ErrorCode")
+    logger.info(
+        "twilio_status_callback",
+        extra={
+            "message_sid": message_sid,
+            "message_status": message_status,
+            "to": to,
+            "from": from_,
+            "error_code": error_code,
+        },
+    )
+    return {"received": True, "status": message_status, "sid": message_sid}
+
+
+@router.api_route("/fallback", methods=["GET", "POST"])
+async def twilio_fallback(request: Request) -> Response:
+    """Fallback handler for voice/SMS if the primary webhook fails."""
+    twiml = """
+<Response>
+  <Say voice="Polly.Joanna">We are unable to take your call at the moment. We will call you back shortly.</Say>
+</Response>
+""".strip()
+    return Response(content=twiml, media_type="text/xml")

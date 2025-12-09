@@ -144,7 +144,8 @@ The system is designed to support:
 - **Self-service signup & onboarding**
   - Opt-in public signup endpoint (`/v1/public/signup`) and static pages (`dashboard/signup.html`, `dashboard/onboarding.html`) that let new service businesses onboard themselves when `ALLOW_SELF_SIGNUP=true`.
   - Auth integration stubs under `/auth/{provider}/*` sketch how to connect LinkedIn, Gmail/Workspace, Google Calendar, OpenAI, and Twilio during onboarding.
-  - QuickBooks stub: `/v1/integrations/qbo/authorize`, `/callback`, `/status`, `/sync`.
+  - Twilio number provisioning/attachment for tenants via `/v1/owner/twilio/provision`; onboarding UI lets owners attach an existing Twilio/Hosted-SMS number or auto-purchase a toll-free number and wires webhooks accordingly.
+  - QuickBooks stub: `/v1/integrations/qbo/authorize`, `/callback`, `/status`, `/sync`; owner dashboard card uses `/v1/owner/qbo/summary`, `/pending`, and `/notify` to show pending approvals and send owner notifications.
   - Billing stub: `/v1/billing/plans`, `/v1/billing/create-checkout-session`, `/v1/billing/webhook` with per-tenant subscription fields.
   - Multi-tenant account model (stub): `/v1/auth/register`, `/v1/auth/me`, `/v1/auth/active-business` track users, roles, and active business.
 
@@ -254,6 +255,10 @@ Key endpoints used:
   reschedules, and service-type mix.
 - `/v1/admin/twilio/health` - Twilio/webhook configuration and metrics, including per-tenant
   voice/SMS request and error counts.
+- `/v1/admin/stripe/health` - Stripe config readiness (keys/prices/webhook secret), subscription
+  activation/failure/webhook failure counters, and subscription status coverage.
+- `/v1/owner/qbo/summary`, `/v1/owner/qbo/pending`, `/v1/owner/qbo/notify` - owner QuickBooks
+  link status, pending approval items, and SMS/email (stub) notifications.
 - `PATCH /v1/admin/businesses/{business_id}` - update status and notification fields.
 - `POST /v1/admin/businesses/{business_id}/rotate-key` - rotate per-tenant API keys.
 - `POST /v1/admin/businesses/{business_id}/rotate-widget-token` - rotate per-tenant widget tokens.
@@ -290,6 +295,10 @@ Twilio, SMS & Multi-Tenant Notes
       calendar event.
     - `RESCHEDULE` or similar phrases - mark the appointment as `PENDING_RESCHEDULE` for human
       follow-up.
+  - **Tenant-specific sending number**
+    - When a business has `twilio_phone_number` set, outbound SMS use that number; otherwise they
+      fall back to the global `SMS_FROM_NUMBER`. Owners can set/attach or auto-provision a number via
+      `/v1/owner/twilio/provision` (used by the onboarding UI).
 
 - **Multi-tenant usage & metrics**
   - Each business (tenant) has:
@@ -297,6 +306,7 @@ Twilio, SMS & Multi-Tenant Notes
     - A `widget_token` used as `X-Widget-Token` for the web chat widget.
     - A `status` (`ACTIVE` / `SUSPENDED`) that controls whether Twilio/CRM/widget traffic is
       served.
+    - A `twilio_phone_number` (optional) to send SMS from a per-tenant number when configured.
   - `/metrics` exposes:
     - Global counters (`total_requests`, `total_errors`, `appointments_scheduled`).
     - Global SMS counters and `sms_by_business[business_id]` for owner vs. customer SMS volume.
@@ -320,3 +330,9 @@ Where to Go Next
 
 All of these are anchored in the Bristol Plumbing PDFs and the RavDevOps engineering whitepaper.
 Any implementation should treat them as the reference when making changes or adding new features.
+
+Testing (key flows)
+-------------------
+
+- Twilio admin health coverage: `python -m pytest tests/test_business_admin.py::test_admin_twilio_health_reflects_config_and_metrics`
+- Stripe admin health coverage: `python -m pytest tests/test_business_admin.py::test_admin_stripe_health_includes_config_and_usage`

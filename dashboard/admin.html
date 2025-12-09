@@ -755,6 +755,22 @@
           <button id="refresh-twilio" type="button" style="width: 100%; margin-top: 1rem;">Refresh</button>
         </div>
 
+        <!-- Stripe Health -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2C6.48 2 2 5.58 2 10c0 2.94 1.94 5.51 4.9 7.02-.21.74-.79 2.75-.9 3.18 0 0-.02.17.09.23.11.05.25.02.25.02.33-.05 2.15-1.41 2.49-1.66.68.1 1.38.16 2.08.16 5.52 0 10-3.58 10-8s-4.48-8-10-8z"/>
+              </svg>
+            </div>
+            <h2>Stripe Health</h2>
+          </div>
+          <div id="stripe-content">
+            <div class="loading">Loading</div>
+          </div>
+          <button id="refresh-stripe" type="button" style="width: 100%; margin-top: 1rem;">Refresh</button>
+        </div>
+
         <!-- GCP Storage Health -->
         <div class="card">
           <div class="card-header">
@@ -1120,6 +1136,7 @@
       async function loadTwilioHealth() {
         const el = document.getElementById("twilio-content");
         if (!el) return;
+        el.innerHTML = '<div class="loading">Loading</div>';
         try {
           const data = await fetchJson("/v1/admin/twilio/health");
           const cfg = data.config || {};
@@ -1134,29 +1151,112 @@
                 <div class="info-label">Provider</div>
                 <div class="info-value">${cfg.provider || "stub"}</div>
                 <div class="info-sub">From: ${cfg.from_number_set ? "set" : "not set"}</div>
+                <div class="info-sub">Owner: ${cfg.owner_number_set ? "set" : "not set"}</div>
               </div>
               <div class="info-item">
-                <div class="info-label">Voice Requests</div>
-                <div class="info-value">${voice}</div>
-                <div class="info-sub">Errors: ${voiceErrors}</div>
+                <div class="info-label">Credentials</div>
+                <div class="info-value">${cfg.account_sid_set && cfg.auth_token_set ? "Set" : "Missing"}</div>
+                <div class="info-sub">Verify sigs: ${cfg.verify_signatures ? "on" : "off"}</div>
               </div>
               <div class="info-item">
-                <div class="info-label">SMS Requests</div>
-                <div class="info-value">${sms}</div>
-                <div class="info-sub">Errors: ${smsErrors}</div>
+                <div class="info-label">Usage</div>
+                <div class="info-value">${formatNumber(voice + sms)}</div>
+                <div class="info-sub">${formatNumber(voice)} voice / ${formatNumber(sms)} sms</div>
               </div>
               <div class="info-item">
-                <div class="info-label">Verify Signatures</div>
-                <div class="info-value">${cfg.verify_signatures ? "Enabled" : "Disabled"}</div>
+                <div class="info-label">Errors</div>
+                <div class="info-value">${formatNumber(voiceErrors + smsErrors)}</div>
+                <div class="info-sub">${formatNumber(voiceErrors)} voice / ${formatNumber(smsErrors)} sms</div>
               </div>
+            </div>
+            <div style="margin-top: 0.75rem;">
+              <div class="info-label">Per-business</div>
+              ${
+                (data.per_business || [])
+                  .map(
+                    (b) => `
+                <div class="usage-row">
+                  <div class="usage-cell strong">${escapeHtml(b.business_id)}</div>
+                  <div class="usage-cell">Voice: ${formatNumber(b.voice_requests)} (${formatNumber(b.voice_errors)} errors)</div>
+                  <div class="usage-cell">SMS: ${formatNumber(b.sms_requests)} (${formatNumber(b.sms_errors)} errors)</div>
+                </div>`
+                  )
+                  .join("") || '<div class="muted">No per-business stats yet.</div>'
+              }
             </div>
           `;
         } catch (err) {
-          console.error("Error loading Twilio health", err);
-          el.innerHTML = '<div class="empty-state"><p>Unable to load Twilio health.</p></div>';
+          el.innerHTML = `<div class="error">Failed to load Twilio health: ${escapeHtml(err.message || err)}</div>`;
         }
       }
 
+      async function loadStripeHealth() {
+        const el = document.getElementById("stripe-content");
+        if (!el) return;
+        el.innerHTML = '<div class="loading">Loading</div>';
+        try {
+          const data = await fetchJson("/v1/admin/stripe/health");
+          const cfg = data.config || {};
+          const subCounts = data.subscriptions_by_status || {};
+          const cfgBadges = [
+            { label: "API key", ok: cfg.api_key_set },
+            { label: "Publishable key", ok: cfg.publishable_key_set },
+            { label: "Webhook secret", ok: cfg.webhook_secret_set },
+            { label: "Price basic", ok: cfg.price_basic_set },
+            { label: "Price growth", ok: cfg.price_growth_set },
+            { label: "Price scale", ok: cfg.price_scale_set },
+            { label: "Verify sigs", ok: cfg.verify_signatures },
+            { label: cfg.use_stub ? "Stub mode" : "Live mode", ok: true },
+          ];
+          const badgeHtml = cfgBadges
+            .map(
+              (b) =>
+                `<span class="status-badge ${b.ok ? "success" : "warning"}" style="margin-bottom:0.35rem;">${escapeHtml(
+                  b.label
+                )}: ${b.ok ? "set" : "missing"}</span>`
+            )
+            .join(" ");
+
+          const statusRows =
+            Object.entries(subCounts).length > 0
+              ? Object.entries(subCounts)
+                  .map(
+                    ([k, v]) =>
+                      `<div class="info-row"><div class="info-label">Status: ${escapeHtml(
+                        k
+                      )}</div><div class="info-value">${formatNumber(v)}</div></div>`
+                  )
+                  .join("")
+              : '<div class="muted">No subscription status data yet.</div>';
+
+          el.innerHTML = `
+            <div class="info-grid">
+              <div>
+                <div class="info-label">Config</div>
+                <div style="display:flex; flex-wrap:wrap; gap:0.35rem;">${badgeHtml}</div>
+              </div>
+              <div>
+                <div class="info-label">Activations</div>
+                <div class="info-value">${formatNumber(data.subscription_activations || 0)}</div>
+                <div class="info-sub">Failures: ${formatNumber(data.subscription_failures || 0)} | Webhook errors: ${formatNumber(
+                  data.billing_webhook_failures || 0
+                )}</div>
+              </div>
+              <div>
+                <div class="info-label">Stripe IDs</div>
+                <div class="info-value">${formatNumber(data.customers_with_stripe_id || 0)}</div>
+                <div class="info-sub">Businesses w/ subscription: ${formatNumber(data.businesses_with_subscription || 0)}</div>
+              </div>
+            </div>
+            <div style="margin-top:0.75rem;">
+              <div class="info-label">Subscriptions by status</div>
+              ${statusRows}
+            </div>
+          `;
+        } catch (err) {
+          el.innerHTML = `<div class="error">Failed to load Stripe health: ${escapeHtml(err.message || err)}</div>`;
+        }
+      }
       async function loadGcpStorageHealth() {
         const el = document.getElementById("gcp-storage-content");
         if (!el) return;
@@ -1236,6 +1336,7 @@
       document.getElementById("refresh-tenants")?.addEventListener("click", loadTenants);
       document.getElementById("refresh-usage")?.addEventListener("click", loadUsage);
       document.getElementById("refresh-twilio")?.addEventListener("click", loadTwilioHealth);
+      document.getElementById("refresh-stripe")?.addEventListener("click", loadStripeHealth);
       document.getElementById("refresh-gcp-storage")?.addEventListener("click", loadGcpStorageHealth);
       document.getElementById("refresh-governance")?.addEventListener("click", loadGovernance);
       document.getElementById("refresh-audit")?.addEventListener("click", loadAudit);
@@ -1271,6 +1372,7 @@
       loadTenants();
       loadUsage();
       loadTwilioHealth();
+      loadStripeHealth();
       loadGcpStorageHealth();
       loadGovernance();
       loadAudit();

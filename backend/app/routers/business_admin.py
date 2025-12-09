@@ -143,6 +143,27 @@ class TwilioHealthResponse(BaseModel):
     per_business: list[TwilioBusinessHealth]
 
 
+class StripeConfigStatus(BaseModel):
+    use_stub: bool
+    api_key_set: bool
+    publishable_key_set: bool
+    webhook_secret_set: bool
+    price_basic_set: bool
+    price_growth_set: bool
+    price_scale_set: bool
+    verify_signatures: bool
+
+
+class StripeHealthResponse(BaseModel):
+    config: StripeConfigStatus
+    subscription_activations: int
+    subscription_failures: int
+    billing_webhook_failures: int
+    subscriptions_by_status: dict[str, int]
+    customers_with_stripe_id: int
+    businesses_with_subscription: int
+
+
 class GcpStorageHealthResponse(BaseModel):
     configured: bool
     project_id: str | None
@@ -876,6 +897,54 @@ def twilio_health() -> TwilioHealthResponse:
         twilio_sms_requests=metrics.twilio_sms_requests,
         twilio_sms_errors=metrics.twilio_sms_errors,
         per_business=per_business,
+    )
+
+
+@router.get("/stripe/health", response_model=StripeHealthResponse)
+def stripe_health() -> StripeHealthResponse:
+    """Return Stripe configuration and subscription usage stats."""
+    settings = get_settings().stripe
+    cfg = StripeConfigStatus(
+        use_stub=bool(settings.use_stub),
+        api_key_set=bool(settings.api_key),
+        publishable_key_set=bool(settings.publishable_key),
+        webhook_secret_set=bool(settings.webhook_secret),
+        price_basic_set=bool(settings.price_basic),
+        price_growth_set=bool(settings.price_growth),
+        price_scale_set=bool(settings.price_scale),
+        verify_signatures=bool(settings.verify_signatures),
+    )
+
+    subscriptions_by_status: dict[str, int] = {}
+    customers_with_stripe_id = 0
+    businesses_with_subscription = 0
+
+    if SQLALCHEMY_AVAILABLE and SessionLocal is not None:
+        session = SessionLocal()
+        try:
+            rows = session.query(BusinessDB.id, BusinessDB.subscription_status, BusinessDB.stripe_customer_id).all()  # type: ignore[arg-type]
+            for row in rows:
+                status_val = (
+                    getattr(row, "subscription_status", None) or "none"
+                ).lower()
+                subscriptions_by_status[status_val] = (
+                    subscriptions_by_status.get(status_val, 0) + 1
+                )
+                if getattr(row, "stripe_customer_id", None):
+                    customers_with_stripe_id += 1
+                if getattr(row, "subscription_status", None):
+                    businesses_with_subscription += 1
+        finally:
+            session.close()
+
+    return StripeHealthResponse(
+        config=cfg,
+        subscription_activations=metrics.subscription_activations,
+        subscription_failures=metrics.subscription_failures,
+        billing_webhook_failures=metrics.billing_webhook_failures,
+        subscriptions_by_status=subscriptions_by_status,
+        customers_with_stripe_id=customers_with_stripe_id,
+        businesses_with_subscription=businesses_with_subscription,
     )
 
 

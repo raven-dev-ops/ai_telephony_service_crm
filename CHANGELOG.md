@@ -23,6 +23,8 @@ Release notes here summarize work that implements or documents the design descri
 - Added per-tenant SMS and Twilio metrics (`sms_by_business`, `twilio_by_business`) and surfaced them via `/metrics` and the admin Twilio health endpoint.
 - Expanded owner/admin dashboards with reschedule queues, SMS usage summaries, per-tenant usage reports, and Twilio/webhook health views.
 - Added example env profiles (`env.dev.inmemory`, `env.dev.db`), an API index (`API_REFERENCE.md`), and data/ops documentation (`DATA_MODEL.md`, expanded `RUNBOOK.md`, and `ENGINEERING.md`) to align docs with the current implementation.
+- Added per-tenant Twilio number support (`twilio_phone_number`), owner onboarding Twilio provisioning (`/v1/owner/twilio/provision`), and admin Stripe health monitoring (`/v1/admin/stripe/health` + dashboard card) covering config readiness, webhook failures, and subscription usage.
+- Added owner QuickBooks link/pending approvals view (`/v1/owner/qbo/summary`, `/pending`), owner notifications (`/v1/owner/qbo/notify`), and a dashboard card to surface pending QBO insertions.
 
 
 [0.2.0] – TBD (example)

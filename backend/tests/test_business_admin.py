@@ -281,6 +281,63 @@ def test_admin_gcp_storage_health_uses_service_result(monkeypatch) -> None:
     assert body["error"] is None
 
 
+def test_admin_stripe_health_includes_config_and_usage(monkeypatch) -> None:
+    # Seed subscription metrics.
+    metrics.subscription_activations = 2
+    metrics.subscription_failures = 1
+    metrics.billing_webhook_failures = 3
+
+    # Seed a couple of businesses with Stripe fields.
+    if SQLALCHEMY_AVAILABLE and SessionLocal is not None:
+        session = SessionLocal()
+        try:
+            session.query(BusinessDB).filter(
+                BusinessDB.id.in_(["stripe_a", "stripe_b"])
+            ).delete(synchronize_session=False)
+            session.add(
+                BusinessDB(  # type: ignore[arg-type]
+                    id="stripe_a",
+                    name="Stripe A",
+                    status="ACTIVE",
+                    stripe_customer_id="cus_A",
+                    stripe_subscription_id="sub_A",
+                    subscription_status="active",
+                )
+            )
+            session.add(
+                BusinessDB(  # type: ignore[arg-type]
+                    id="stripe_b",
+                    name="Stripe B",
+                    status="ACTIVE",
+                    stripe_customer_id=None,
+                    stripe_subscription_id="sub_B",
+                    subscription_status="past_due",
+                )
+            )
+            session.commit()
+        finally:
+            session.close()
+
+    resp = client.get("/v1/admin/stripe/health")
+    assert resp.status_code == 200
+    body = resp.json()
+
+    cfg = body["config"]
+    assert "api_key_set" in cfg and "publishable_key_set" in cfg
+    assert "webhook_secret_set" in cfg and "price_basic_set" in cfg
+    assert "verify_signatures" in cfg and "use_stub" in cfg
+
+    assert body["subscription_activations"] == metrics.subscription_activations
+    assert body["subscription_failures"] == metrics.subscription_failures
+    assert body["billing_webhook_failures"] == metrics.billing_webhook_failures
+
+    subs = body["subscriptions_by_status"]
+    assert subs.get("active", 0) >= 1
+    assert subs.get("past_due", 0) >= 1
+    assert body["customers_with_stripe_id"] >= 1
+    assert body["businesses_with_subscription"] >= 1
+
+
 def test_admin_retention_prune_deletes_old_data() -> None:
     assert SessionLocal is not None
     session = SessionLocal()

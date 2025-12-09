@@ -65,6 +65,14 @@ class SmsService:
         sid = self._settings.twilio_account_sid
         token = self._settings.twilio_auth_token
         from_number = self._settings.from_number
+        if business_id and SQLALCHEMY_AVAILABLE and SessionLocal is not None:
+            session_db = SessionLocal()
+            try:
+                row = session_db.get(BusinessDB, business_id)
+                if row is not None and getattr(row, "twilio_phone_number", None):
+                    from_number = row.twilio_phone_number  # type: ignore[assignment]
+            finally:
+                session_db.close()
         if not sid or not token or not from_number:
             return
 

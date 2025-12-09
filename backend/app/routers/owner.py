@@ -9,7 +9,6 @@ from pydantic import BaseModel, EmailStr, Field
 
 from ..deps import ensure_business_active, require_dashboard_role
 from ..repositories import appointments_repo, conversations_repo, customers_repo
-from ..services.stt_tts import speech_service
 from ..db import SQLALCHEMY_AVAILABLE, SessionLocal
 from ..db_models import (
     AppointmentDB,
@@ -20,6 +19,9 @@ from ..db_models import (
     TechnicianDB,
 )
 from ..metrics import metrics
+from ..services import twilio_provision
+from ..services.sms import sms_service
+from ..services.stt_tts import speech_service
 from ..services.geo_utils import derive_neighborhood_label, geocode_address
 from ..services.zip_enrichment import fetch_zip_income
 from ..business_config import get_voice_for_business
@@ -997,6 +999,7 @@ def _business_onboarding_profile_from_row(
     owner_profile_image_url = getattr(row, "owner_profile_image_url", None)
     service_tier = getattr(row, "service_tier", None)
     tts_voice = getattr(row, "tts_voice", None)
+    twilio_phone_number = getattr(row, "twilio_phone_number", None)
     terms_accepted = bool(getattr(row, "terms_accepted_at", None))
     privacy_accepted = bool(getattr(row, "privacy_accepted_at", None))
     onboarding_step = getattr(row, "onboarding_step", None)
@@ -1055,6 +1058,7 @@ def _business_onboarding_profile_from_row(
         terms_accepted=terms_accepted,
         privacy_accepted=privacy_accepted,
         tts_voice=tts_voice,
+        twilio_phone_number=twilio_phone_number,
         onboarding_step=onboarding_step,
         onboarding_completed=onboarding_completed,
         subscription_status=subscription_status,
@@ -1096,6 +1100,7 @@ class OwnerOnboardingProfile(BaseModel):
     terms_accepted: bool
     privacy_accepted: bool
     tts_voice: str | None = None
+    twilio_phone_number: str | None = None
     onboarding_step: str | None = None
     onboarding_completed: bool = False
     subscription_status: str | None = None
@@ -1122,6 +1127,7 @@ def owner_onboarding_profile(
             terms_accepted=False,
             privacy_accepted=False,
             tts_voice=get_voice_for_business(business_id),
+            twilio_phone_number=None,
             onboarding_step=None,
             onboarding_completed=False,
             subscription_status=None,
@@ -1250,6 +1256,75 @@ class OwnerIntegrationsUpdateRequest(BaseModel):
     quickbooks_connected: bool | None = None
 
 
+class TwilioProvisionRequest(BaseModel):
+    phone_number: str | None = Field(
+        default=None,
+        description="Attach an existing Twilio/Hosted SMS number instead of buying one.",
+    )
+    purchase_new: bool = Field(
+        default=False,
+        description="Attempt to purchase a new toll-free number via Twilio if no phone_number is provided.",
+    )
+    friendly_name: str | None = Field(
+        default=None, description="Optional FriendlyName for the Twilio number."
+    )
+    webhook_base_url: str | None = Field(
+        default=None,
+        description="Base URL for your deployed API (e.g., https://api.example.com).",
+    )
+    voice_webhook_url: str | None = Field(
+        default=None,
+        description="Override VoiceUrl instead of using webhook_base_url + /twilio/voice",
+    )
+    sms_webhook_url: str | None = Field(
+        default=None,
+        description="Override SmsUrl instead of using webhook_base_url + /twilio/sms",
+    )
+    status_callback_url: str | None = Field(
+        default=None,
+        description="Override StatusCallback instead of using webhook_base_url + /twilio/status-callback",
+    )
+
+
+class TwilioProvisionResponse(BaseModel):
+    status: str
+    phone_number: str | None = None
+    message: str
+
+
+class OwnerQboPendingItem(BaseModel):
+    appointment_id: str
+    customer_name: str | None = None
+    service_type: str | None = None
+    quote_status: str | None = None
+    quoted_value: float | None = None
+    start_time: datetime | None = None
+
+
+class OwnerQboPendingResponse(BaseModel):
+    items: list[OwnerQboPendingItem]
+    total: int
+
+
+class OwnerQboSummaryResponse(BaseModel):
+    connected: bool
+    realm_id: str | None = None
+    token_expires_at: datetime | None = None
+    last_sync_at: datetime | None = None
+    pending_count: int
+
+
+class OwnerQboNotifyRequest(BaseModel):
+    send_sms: bool = True
+    send_email: bool = False
+
+
+class OwnerQboNotifyResponse(BaseModel):
+    sms_sent: bool
+    email_sent: bool
+    message: str
+
+
 @router.patch("/onboarding/integrations", response_model=OwnerOnboardingProfile)
 def owner_onboarding_integrations(
     payload: OwnerIntegrationsUpdateRequest,
@@ -1286,6 +1361,29 @@ def owner_onboarding_integrations(
         return _business_onboarding_profile_from_row(row, business_id)
     finally:
         session.close()
+
+
+@router.post("/twilio/provision", response_model=TwilioProvisionResponse)
+async def owner_twilio_provision(
+    payload: TwilioProvisionRequest,
+    business_id: str = Depends(ensure_business_active),
+) -> TwilioProvisionResponse:
+    """Attach an existing Twilio number or purchase a toll-free number for this tenant."""
+    result = await twilio_provision.provision_toll_free_number(
+        business_id=business_id,
+        phone_number=payload.phone_number,
+        purchase_new=payload.purchase_new,
+        friendly_name=payload.friendly_name,
+        webhook_base_url=payload.webhook_base_url,
+        voice_webhook_url=payload.voice_webhook_url,
+        sms_webhook_url=payload.sms_webhook_url,
+        status_callback_url=payload.status_callback_url,
+    )
+    return TwilioProvisionResponse(
+        status=result.status,
+        phone_number=result.phone_number,
+        message=result.message,
+    )
 
 
 @router.get("/calendar/report.pdf")
@@ -1328,6 +1426,105 @@ def owner_calendar_report_pdf(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _pending_qbo_items(business_id: str) -> list[OwnerQboPendingItem]:
+    """Return appointments that look pending for QBO insertion."""
+    items: list[OwnerQboPendingItem] = []
+    for appt in appointments_repo.list_for_business(business_id):
+        status = (getattr(appt, "quote_status", None) or "").upper()
+        if status not in {"", "PENDING", "PENDING_QBO", "READY_FOR_QBO", "DRAFT"}:
+            continue
+        cust = customers_repo.get(appt.customer_id) if appt.customer_id else None
+        quoted_val = getattr(appt, "quoted_value", None)
+        items.append(
+            OwnerQboPendingItem(
+                appointment_id=appt.id,
+                customer_name=cust.name if cust else None,
+                service_type=getattr(appt, "service_type", None),
+                quote_status=status or None,
+                quoted_value=float(quoted_val) if quoted_val is not None else None,
+                start_time=getattr(appt, "start_time", None),
+            )
+        )
+    return items
+
+
+@router.get("/qbo/pending", response_model=OwnerQboPendingResponse)
+def owner_qbo_pending(
+    business_id: str = Depends(ensure_business_active),
+) -> OwnerQboPendingResponse:
+    """List appointments pending insertion/update into QuickBooks."""
+    items = _pending_qbo_items(business_id)
+    return OwnerQboPendingResponse(items=items, total=len(items))
+
+
+@router.get("/qbo/summary", response_model=OwnerQboSummaryResponse)
+def owner_qbo_summary(
+    business_id: str = Depends(ensure_business_active),
+) -> OwnerQboSummaryResponse:
+    """Return QBO link status plus cached counts for pending inserts."""
+    connected = False
+    realm_id = None
+    token_expires_at = None
+    if SQLALCHEMY_AVAILABLE and SessionLocal is not None:
+        session = SessionLocal()
+        try:
+            row = session.get(BusinessDB, business_id)
+            if row is not None:
+                connected = getattr(row, "integration_qbo_status", "") == "connected"
+                realm_id = getattr(row, "qbo_realm_id", None)
+                token_expires_at = getattr(row, "qbo_token_expires_at", None)
+        finally:
+            session.close()
+    pending = _pending_qbo_items(business_id)
+    return OwnerQboSummaryResponse(
+        connected=connected,
+        realm_id=realm_id,
+        token_expires_at=token_expires_at,
+        last_sync_at=None,
+        pending_count=len(pending),
+    )
+
+
+@router.post("/qbo/notify", response_model=OwnerQboNotifyResponse)
+async def owner_qbo_notify(
+    payload: OwnerQboNotifyRequest,
+    business_id: str = Depends(ensure_business_active),
+) -> OwnerQboNotifyResponse:
+    """Notify the owner about pending QBO insertions via SMS/email (email stubbed)."""
+    business_name = "your business"
+    owner_name = None
+    if SQLALCHEMY_AVAILABLE and SessionLocal is not None:
+        session = SessionLocal()
+        try:
+            row = session.get(BusinessDB, business_id)
+            if row is not None:
+                business_name = getattr(row, "name", business_name)
+                owner_name = getattr(row, "owner_name", None)
+        finally:
+            session.close()
+
+    pending = _pending_qbo_items(business_id)
+    pending_count = len(pending)
+    sms_sent = False
+    email_sent = False  # email delivery is not implemented; stubbed for now.
+
+    greeting = f"Hi {owner_name}," if owner_name else "Hi,"
+    summary_line = f"You have {pending_count} QuickBooks items pending approval."
+    flavor = f" for {business_name}" if business_name else ""
+    body = f"{greeting} {summary_line}{flavor}."
+
+    if payload.send_sms:
+        await sms_service.notify_owner(body, business_id=business_id)
+        sms_sent = True
+
+    # Email path would go here in a real deployment.
+    return OwnerQboNotifyResponse(
+        sms_sent=sms_sent,
+        email_sent=email_sent,
+        message=body,
     )
 
 

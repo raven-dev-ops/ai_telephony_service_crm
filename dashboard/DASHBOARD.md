@@ -148,6 +148,18 @@ Main cards and the endpoints they rely on:
     - `GET /v1/admin/twilio/health` together with `/metrics` and `twilio_by_business` to show
       Twilio voice/SMS request and error counts for each tenant.
 
+- **Stripe Health**
+  - Uses:
+    - `GET /v1/admin/stripe/health` to show Stripe config readiness (keys/prices/webhook secret,
+      signature verification), subscription activations/failures, webhook failures, and subscription
+      coverage by status.
+
+- **Owner QuickBooks card (owner dashboard)**
+  - Uses:
+    - `GET /v1/owner/qbo/summary` to show connection status and pending approvals.
+    - `GET /v1/owner/qbo/pending` to list pending insertions (quote statuses).
+    - `POST /v1/owner/qbo/notify` to SMS/email (stub) the owner about pending approvals.
+
 - **Safety & Production Checklist**
   - Uses backend configuration and a subset of metrics to show whether key production settings
     (admin key, `REQUIRE_BUSINESS_API_KEY`, Twilio signature verification, DB/Redis/Session

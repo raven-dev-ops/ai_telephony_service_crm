@@ -151,7 +151,6 @@ def create_checkout_session(
     )
 
 
-
 @router.get("/portal-link", response_model=BillingPortalResponse)
 def get_billing_portal_link() -> BillingPortalResponse:
     """Return a pre-configured Stripe billing portal URL if available."""
@@ -159,6 +158,7 @@ def get_billing_portal_link() -> BillingPortalResponse:
     if not stripe_cfg.billing_portal_url:
         raise HTTPException(status_code=404, detail="Billing portal not configured")
     return BillingPortalResponse(url=stripe_cfg.billing_portal_url)
+
 
 @router.post("/webhook")
 async def billing_webhook(

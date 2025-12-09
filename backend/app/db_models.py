@@ -28,6 +28,7 @@ if SQLALCHEMY_AVAILABLE:
         calendar_id = Column(String, nullable=True)  # type: ignore[call-arg]
         status = Column(String, nullable=False, default="ACTIVE")  # type: ignore[call-arg]
         owner_phone = Column(String, nullable=True)  # type: ignore[call-arg]
+        twilio_phone_number = Column(String, nullable=True)  # type: ignore[call-arg]
         emergency_keywords = Column(String, nullable=True)  # type: ignore[call-arg]
         default_reminder_hours = Column(Integer, nullable=True)  # type: ignore[call-arg]
         service_duration_config = Column(String, nullable=True)  # type: ignore[call-arg]
@@ -197,6 +198,7 @@ else:  # pragma: no cover - for environments without SQLAlchemy
         api_key: str
         widget_token: str
         status: str
+        twilio_phone_number: str | None
 
     class UserDB:  # type: ignore[misc]
         __tablename__ = "users"
