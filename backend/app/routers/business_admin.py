@@ -55,6 +55,12 @@ class BusinessUpdateRequest(BaseModel):
     retention_sms_template: str | None = None
     service_tier: str | None = None
     tts_voice: str | None = None
+    intent_threshold: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Minimum confidence (0-1) required to accept an intent; stored per tenant.",
+    )
 
 
 class BusinessResponse(BaseModel):
@@ -89,6 +95,7 @@ class BusinessResponse(BaseModel):
     retention_sms_template: str | None = None
     service_tier: str | None = None
     tts_voice: str | None = None
+    intent_threshold: float | None = None
 
 
 class BusinessUsageResponse(BusinessResponse):
@@ -266,6 +273,15 @@ def _get_db_session():
 
 def _business_to_response(row: BusinessDB) -> BusinessResponse:
     created_at = getattr(row, "created_at", datetime.now(UTC)).replace(tzinfo=UTC)
+    raw_intent = getattr(row, "intent_threshold", None)
+    intent_threshold: float | None = None
+    try:
+        if raw_intent is not None:
+            intent_threshold = float(raw_intent)
+            if intent_threshold > 1:
+                intent_threshold = intent_threshold / 100.0
+    except Exception:
+        intent_threshold = None
     return BusinessResponse(
         id=row.id,
         name=row.name,
@@ -300,6 +316,7 @@ def _business_to_response(row: BusinessDB) -> BusinessResponse:
         retention_sms_template=getattr(row, "retention_sms_template", None),
         service_tier=getattr(row, "service_tier", None),
         tts_voice=getattr(row, "tts_voice", None),
+        intent_threshold=intent_threshold,
     )
 
 
@@ -441,6 +458,9 @@ def update_business(
             row.service_tier = payload.service_tier
         if payload.tts_voice is not None:
             row.tts_voice = payload.tts_voice
+        if payload.intent_threshold is not None:
+            # Store as integer percentage to preserve precision while using INT column.
+            row.intent_threshold = int(round(payload.intent_threshold * 100))
         session.add(row)
         session.commit()
         session.refresh(row)
