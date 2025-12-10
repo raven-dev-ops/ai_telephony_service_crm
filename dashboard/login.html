@@ -118,6 +118,21 @@
         gap: 0.75rem;
         font-size: 0.9rem;
       }
+      .input-wrap {
+        position: relative;
+      }
+      .toggle-visibility {
+        position: absolute;
+        right: 0.6rem;
+        top: 50%;
+        transform: translateY(-50%);
+        border: none;
+        background: transparent;
+        color: #475569;
+        font-weight: 600;
+        cursor: pointer;
+        font-size: 0.85rem;
+      }
       .strength {
         height: 8px;
         width: 100%;
@@ -156,7 +171,10 @@
           </div>
           <div class="form-group">
             <label for="login-password">Password</label>
-            <input id="login-password" name="password" type="password" placeholder="Enter your password" required />
+            <div class="input-wrap">
+              <input id="login-password" name="password" type="password" placeholder="Enter your password" required />
+              <button class="toggle-visibility" type="button" data-target="login-password">Show</button>
+            </div>
             <div class="strength" aria-hidden="true"><span id="login-strength"></span></div>
             <div class="muted" id="login-hint"></div>
           </div>
@@ -191,7 +209,10 @@
           </div>
           <div class="form-group">
             <label for="reg-password">Password</label>
-            <input id="reg-password" name="password" type="password" placeholder="At least 8 characters" required />
+            <div class="input-wrap">
+              <input id="reg-password" name="password" type="password" placeholder="At least 8 characters" required />
+              <button class="toggle-visibility" type="button" data-target="reg-password">Show</button>
+            </div>
             <div class="strength" aria-hidden="true"><span id="reg-strength"></span></div>
             <div class="muted" id="reg-hint"></div>
           </div>
@@ -394,6 +415,16 @@
       document.getElementById("forgot-password")?.addEventListener("click", (e) => {
         e.preventDefault();
         alert("Reset link sent (stub).");
+      });
+      document.querySelectorAll(".toggle-visibility").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const targetId = btn.dataset.target;
+          const input = document.getElementById(targetId);
+          if (!input) return;
+          const isPassword = input.type === "password";
+          input.type = isPassword ? "text" : "password";
+          btn.textContent = isPassword ? "Hide" : "Show";
+        });
       });
     </script>
   </body>
