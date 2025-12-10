@@ -7969,7 +7969,14 @@
 
             const endLabel = data?.current_period_end ? new Date(data.current_period_end).toLocaleString() : "n/a";
 
-            statusText.textContent = `Status: ${subscriptionStatus} . Period end: ${endLabel}`;
+            const graceNote =
+              data?.in_grace && !data?.blocked
+                ? ` • In grace (${data?.grace_remaining_days || 0} days left)`
+                : data?.blocked && data?.message
+                ? ` • ${data.message}`
+                : "";
+
+            statusText.textContent = `Status: ${subscriptionStatus}${graceNote} . Period end: ${endLabel}`;
 
           }
 
@@ -7999,25 +8006,63 @@
 
             planBadge.textContent = `Plan: ${subscriptionPlan}`;
 
-            planBadge.className = "status-badge " + (subscriptionStatus === "active" ? "success" : "warn");
+            const pillState =
+
+              data?.blocked || subscriptionStatus === "canceled"
+
+                ? "disconnected"
+
+                : subscriptionStatus === "active"
+
+                ? "success"
+
+                : "warn";
+
+            planBadge.className = "status-badge " + pillState;
 
           }
 
-          const billingState = subscriptionStatus === "active" ? "ok" : subscriptionStatus === "past_due" ? "warn" : "error";
+          const billingState =
+
+            data?.blocked
+
+              ? "error"
+
+              : subscriptionStatus === "active"
+
+              ? "ok"
+
+              : "warn";
 
           const billingNote =
 
-            subscriptionStatus === "active"
+            data?.blocked && data?.message
+
+              ? data.message
+
+              : data?.in_grace
+
+              ? `In grace period (${data?.grace_remaining_days || 0} days remaining)`
+
+              : subscriptionStatus === "active"
 
               ? "Billing active"
 
               : subscriptionStatus === "past_due"
 
-              ? "Past due . update payment method"
+              ? "Past due · update payment method"
 
               : "Add payment method to activate";
 
           setDataSourceStatus("data-pill-billing", billingState, billingNote);
+
+          const startBtn = document.getElementById("start-subscription");
+
+          if (startBtn) {
+
+            startBtn.textContent = subscriptionStatus === "active" ? "Update plan" : "Start/Resume Subscription";
+
+          }
 
           if (warning) {
 

@@ -131,7 +131,7 @@ class StripeSettings(BaseModel):
     billing_portal_return_url: str | None = None
     checkout_success_url: str = "https://example.com/billing/success?session_id={CHECKOUT_SESSION_ID}"
     checkout_cancel_url: str = "https://example.com/billing/canceled"
-    use_stub: bool = True
+    use_stub: bool = False
     verify_signatures: bool = True
     replay_protection_seconds: int = 300
 
@@ -285,6 +285,16 @@ class AppSettings(BaseModel):
             ),
             sandbox=os.getenv("QBO_SANDBOX", "true").lower() != "false",
         )
+        # Default to live Stripe in non-test environments; allow stubbing during tests/dev
+        # unless explicitly overridden via STRIPE_USE_STUB.
+        stripe_use_stub_default = (
+            "true"
+            if (
+                os.getenv("PYTEST_CURRENT_TEST")
+                or os.getenv("TESTING", "false").lower() == "true"
+            )
+            else "false"
+        )
         stripe = StripeSettings(
             api_key=os.getenv("STRIPE_API_KEY"),
             publishable_key=os.getenv("STRIPE_PUBLISHABLE_KEY"),
@@ -303,7 +313,8 @@ class AppSettings(BaseModel):
                 "STRIPE_CHECKOUT_CANCEL_URL",
                 "https://example.com/billing/canceled",
             ),
-            use_stub=os.getenv("STRIPE_USE_STUB", "true").lower() != "false",
+            use_stub=os.getenv("STRIPE_USE_STUB", stripe_use_stub_default).lower()
+            == "true",
             verify_signatures=os.getenv("STRIPE_VERIFY_SIGNATURES", "true").lower()
             == "true",
             replay_protection_seconds=int(

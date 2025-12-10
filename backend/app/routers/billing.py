@@ -124,6 +124,7 @@ def _update_subscription(
     customer_id: Optional[str],
     subscription_id: Optional[str],
     current_period_end: Optional[datetime],
+    plan_id: Optional[str] = None,
 ) -> None:
     session = _require_db()
     try:
@@ -131,6 +132,8 @@ def _update_subscription(
         if not row:
             raise HTTPException(status_code=404, detail="Business not found")
         row.subscription_status = status
+        if plan_id:
+            row.service_tier = plan_id
         if customer_id:
             row.stripe_customer_id = customer_id
         if subscription_id:
@@ -187,13 +190,11 @@ def create_checkout_session(
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
 
-    # Prefer a prebuilt Stripe Payment Link when provided (low-code path).
-    if stripe_cfg.payment_link_url:
-        return CheckoutSessionResponse(
-            url=stripe_cfg.payment_link_url, session_id="stripe_payment_link"
-        )
-
     if stripe_cfg.use_stub:
+        if stripe_cfg.payment_link_url:
+            return CheckoutSessionResponse(
+                url=stripe_cfg.payment_link_url, session_id="stripe_payment_link"
+            )
         url = f"https://example.com/checkout?plan={plan.id}&business_id={business_id}"
         return CheckoutSessionResponse(url=url, session_id=f"stub_{plan.id}")
 
@@ -269,6 +270,29 @@ def _status_from_subscription(event_type: str, obj: dict[str, object]) -> Subscr
     elif event_type in {"invoice.payment_succeeded", "checkout.session.completed"}:
         status = status or "active"
     return SubscriptionState(status=status or "active")
+
+
+def _plan_from_event_obj(obj: dict[str, object]) -> str | None:
+    metadata = obj.get("metadata") if isinstance(obj, dict) else None
+    plan_id = None
+    if isinstance(metadata, dict):
+        plan_id = metadata.get("plan_id") or metadata.get("plan")
+    if not plan_id and isinstance(obj, dict):
+        items = obj.get("items", {}) if isinstance(obj.get("items"), dict) else {}
+        data_items = items.get("data") if isinstance(items, dict) else None
+        if isinstance(data_items, list):
+            for item in data_items:
+                if not isinstance(item, dict):
+                    continue
+                price = item.get("price") if isinstance(item.get("price"), dict) else {}
+                plan_id = (
+                    price.get("lookup_key")
+                    or price.get("nickname")
+                    or price.get("id")
+                )
+                if plan_id:
+                    break
+    return plan_id
 
 
 @router.get("/subscription/status", response_model=SubscriptionStatusResponse)
@@ -366,6 +390,7 @@ async def billing_webhook(
         )
         customer_id = data_obj.get("customer")
         subscription_id = data_obj.get("subscription") or data_obj.get("id")
+        plan_id = _plan_from_event_obj(data_obj)
         period_end = data_obj.get("current_period_end")
         current_period_end = (
             datetime.fromtimestamp(period_end, UTC)
@@ -388,6 +413,7 @@ async def billing_webhook(
                 customer_id=customer_id,
                 subscription_id=subscription_id,
                 current_period_end=current_period_end,
+                plan_id=plan_id,
             )
             metrics.subscription_activations += 1
             logger.info(
@@ -413,8 +439,13 @@ async def billing_webhook(
                 customer_id=customer_id,
                 subscription_id=subscription_id,
                 current_period_end=current_period_end,
+                plan_id=plan_id,
             )
             metrics.subscription_activations += 1
+            if state.status not in {"active", "trialing"}:
+                await subscription_service.notify_status_change(
+                    business_id, subscription_service.compute_state(business_id)
+                )
             return {"status": "ok"}
         elif event_type in {"invoice.payment_failed", "customer.subscription.deleted"}:
             _update_subscription(
@@ -425,6 +456,7 @@ async def billing_webhook(
                 customer_id=customer_id,
                 subscription_id=subscription_id,
                 current_period_end=current_period_end,
+                plan_id=plan_id,
             )
             metrics.subscription_failures += 1
             logger.warning(
@@ -435,6 +467,9 @@ async def billing_webhook(
                     "subscription_id": subscription_id,
                     "event_type": event_type,
                 },
+            )
+            await subscription_service.notify_status_change(
+                business_id, subscription_service.compute_state(business_id)
             )
             return {"status": "ok"}
         else:

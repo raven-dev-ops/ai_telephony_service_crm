@@ -22,7 +22,7 @@ from ..metrics import (
     metrics,
 )
 from ..repositories import conversations_repo, customers_repo, appointments_repo
-from ..services import conversation, sessions
+from ..services import conversation, sessions, subscription as subscription_service
 from ..services.calendar import calendar_service
 from ..services.sms import sms_service
 from ..services.email_service import email_service
@@ -369,6 +369,10 @@ async def twilio_voice(
             "from": From,
             "call_status": CallStatus,
         },
+    )
+
+    await subscription_service.check_access(
+        business_id, feature="calls", upcoming_calls=1
     )
 
     # Track Twilio voice webhook usage.
@@ -970,6 +974,10 @@ async def twilio_voice_assistant(
     business_id = business_id_param or DEFAULT_BUSINESS_ID
     settings = get_settings()
     stream_enabled = bool(getattr(settings.telephony, "twilio_streaming_enabled", False))
+
+    await subscription_service.check_access(
+        business_id, feature="calls", upcoming_calls=1
+    )
     metrics.twilio_voice_requests += 1
     per_tenant = metrics.twilio_by_business.setdefault(
         business_id, BusinessTwilioMetrics()
@@ -1123,6 +1131,10 @@ async def twilio_voice_stream(
     link = twilio_state_store.get_call_session(payload.call_sid)
     session_obj = sessions.session_store.get(link.session_id) if link else None
     if not session_obj:
+        await ensure_onboarding_ready(business_id)
+        await subscription_service.check_access(
+            business_id, feature="calls", upcoming_calls=1
+        )
         session_obj = sessions.session_store.create(
             caller_phone=payload.from_number,
             business_id=business_id,

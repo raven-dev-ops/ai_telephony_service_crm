@@ -34,6 +34,7 @@ Release notes here summarize work that implements or documents the design descri
 - Integration readiness badges distinguish stub vs live for QuickBooks, Twilio, and Google; QuickBooks sync defaults to inline execution (pass `enqueue=true` to run in the background).
 - Testing/guardrails: added admin route regression checks, end-to-end signup→voice scheduling flow, load-smoke context test, and subscription enforcement guardrail coverage.
 - Twilio voice streaming now enqueues missed/partial calls into the callback queue, sends owner alerts, and includes signature validation tests for voice and status webhooks.
+- Stripe billing now favors live Checkout/Customer Portal when configured, verifies webhook signatures with replay protection, records plan/service tier from Stripe metadata, emails owners on payment failures, and enforces subscription status across voice/Twilio/voice-session APIs with dashboard warnings.
 
 
 [0.2.0] – TBD (example)

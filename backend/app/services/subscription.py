@@ -162,6 +162,18 @@ async def _notify_owner_if_needed(
         )
 
 
+async def notify_status_change(business_id: str, state: SubscriptionState) -> None:
+    """Best-effort owner notification for subscription state transitions."""
+    if not (SQLALCHEMY_AVAILABLE and SessionLocal is not None):
+        return
+    session = SessionLocal()
+    try:
+        business = session.get(BusinessDB, business_id)
+    finally:
+        session.close()
+    await _notify_owner_if_needed(business, state)
+
+
 async def check_access(
     business_id: str,
     *,

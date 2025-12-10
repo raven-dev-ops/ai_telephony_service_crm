@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from ..deps import ensure_onboarding_ready
 from ..metrics import BusinessVoiceSessionMetrics, metrics
 from ..repositories import conversations_repo, customers_repo
-from ..services import conversation, sessions
+from ..services import conversation, sessions, subscription as subscription_service
 from ..business_config import get_voice_for_business
 
 
@@ -45,6 +45,9 @@ async def start_session(
     payload: SessionStartRequest,
     business_id: str = Depends(ensure_onboarding_ready),
 ) -> SessionStartResponse:
+    await subscription_service.check_access(
+        business_id, feature="calls", upcoming_calls=1
+    )
     # Track voice session API usage.
     metrics.voice_session_requests += 1
     per_tenant = metrics.voice_sessions_by_business.setdefault(
