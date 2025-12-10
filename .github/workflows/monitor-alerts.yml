@@ -1,0 +1,90 @@
+name: Monitor Twilio Errors and Callback Queue
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "15 6 * * *"  # daily check at 06:15 UTC
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check metrics and callbacks
+        env:
+          METRICS_URL: ${{ secrets.METRICS_URL }}
+          METRICS_AUTH_HEADER: ${{ secrets.METRICS_AUTH_HEADER }}
+          CALLBACK_SUMMARY_URL: ${{ secrets.CALLBACK_SUMMARY_URL }}
+          OWNER_TOKEN: ${{ secrets.OWNER_DASHBOARD_TOKEN }}
+          TWILIO_ERROR_THRESHOLD: ${{ secrets.TWILIO_ERROR_THRESHOLD }}
+          CALLBACK_PENDING_THRESHOLD: ${{ secrets.CALLBACK_PENDING_THRESHOLD }}
+        run: |
+          python - <<'PY'
+import os, sys, requests
+
+metrics_url = os.getenv("METRICS_URL")
+metrics_hdr = os.getenv("METRICS_AUTH_HEADER")
+callback_url = os.getenv("CALLBACK_SUMMARY_URL")
+owner_token = os.getenv("OWNER_TOKEN")
+err_threshold = float(os.getenv("TWILIO_ERROR_THRESHOLD", "5"))
+cb_threshold = int(os.getenv("CALLBACK_PENDING_THRESHOLD", "10"))
+
+def parse_header(h):
+    if not h or ":" not in h:
+        return {}
+    k, v = h.split(":", 1)
+    return {k.strip(): v.strip()}
+
+errors = []
+
+if metrics_url:
+    try:
+        resp = requests.get(metrics_url, headers=parse_header(metrics_hdr), timeout=8)
+        resp.raise_for_status()
+        text = resp.text
+        voice_errors = None
+        for line in text.splitlines():
+            if "twilio_voice_errors" in line and "#" not in line:
+                parts = line.strip().split()
+                if len(parts) >= 2:
+                    try:
+                        voice_errors = float(parts[-1])
+                        break
+                    except Exception:
+                        pass
+        if voice_errors is not None and voice_errors > err_threshold:
+            errors.append(f"twilio_voice_errors={voice_errors} > {err_threshold}")
+    except Exception as exc:
+        errors.append(f"metrics_check_failed: {exc}")
+else:
+    print("METRICS_URL not set; skipping metrics check.")
+
+if callback_url and owner_token:
+    try:
+        resp = requests.get(
+            callback_url,
+            headers={"X-Owner-Token": owner_token},
+            timeout=8,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        pending = data.get("pending") or data.get("pending_callbacks") or 0
+        if pending and pending > cb_threshold:
+            errors.append(f"callback_pending={pending} > {cb_threshold}")
+    except Exception as exc:
+        errors.append(f"callback_check_failed: {exc}")
+else:
+    print("CALLBACK_SUMMARY_URL or OWNER_TOKEN not set; skipping callback check.")
+
+if errors:
+    print("ALERT:", "; ".join(errors))
+    sys.exit(1)
+print("Checks passed")
+PY

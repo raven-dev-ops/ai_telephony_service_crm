@@ -30,3 +30,11 @@ jobs:
           NLU_INTENT_THRESHOLD: ${{ secrets.NLU_INTENT_THRESHOLD }}
         run: |
           pytest tests/test_twilio_streaming_canary.py
+      - name: Notify Slack on failure
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\":rotating_light: Voice canary failed on ${GITHUB_REF} (${GITHUB_SHA}). Check logs.\"}" \
+            "$SLACK_WEBHOOK_URL"
