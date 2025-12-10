@@ -43,6 +43,7 @@ To run the backend and dashboards locally:
 - Twilio voice streaming: set `TWILIO_STREAMING_ENABLED=true` and `TWILIO_STREAM_BASE_URL` (use your prod/staging host; dev stubs default to `wss://stream.stub.local/v1/twilio/voice-stream`).
 - Intent thresholds: set `NLU_INTENT_THRESHOLD` (0–1, default 0.35) or per-tenant `intent_threshold` to tighten/loosen assistant intent gating.
 - Example envs: `env.dev.inmemory`, `env.dev.db`, `env.dev.twilio` (local); stubbed `env.staging.stub` and `env.prod.stub` enable streaming with `TWILIO_STREAM_BASE_URL=wss://ai-telephony-backend-tcmgy2pf2a-uc.a.run.app/v1/twilio/voice-stream` and `NLU_INTENT_THRESHOLD=0.4`—replace with your real hosts/keys before deploying.
+- Investor brief: `/planner` serves the PLANNER.md HTML (also linked from the dashboard header as “Investor Brief”).
 
 5. **Try self-service signup & onboarding (optional)**
    - Enable `ALLOW_SELF_SIGNUP=true` in your backend environment.
