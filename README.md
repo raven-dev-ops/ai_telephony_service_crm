@@ -67,6 +67,7 @@ Secret Management & Safety
 --------------------------
 
 - Secrets are expected in environment variables; non-stub providers (Twilio, Stripe, OpenAI) require their keys to be set. Misconfigurations are logged as warnings at startup.
+- Email delivery: set `EMAIL_PROVIDER=sendgrid` with `SENDGRID_API_KEY` (and optional `EMAIL_FROM`), or `EMAIL_PROVIDER=gmail` when tenants authorize Gmail via OAuth; otherwise emails are stubbed but still logged.
 - Stripe webhooks: when `STRIPE_USE_STUB=false`, configure `STRIPE_WEBHOOK_SECRET` (and optional `STRIPE_VERIFY_SIGNATURES` + `STRIPE_REPLAY_PROTECTION_SECONDS`, default 300s); `/v1/billing/webhook` verifies the `Stripe-Signature` header and rejects duplicate event IDs in that window.
 - Data retention: automated purge runs every `RETENTION_PURGE_INTERVAL_HOURS` (default 24; set to 0 to disable) and can be invoked manually via `/v1/admin/retention/prune`; audit history is available at `/v1/admin/retention/history`.
 - Dashboard/CRM RBAC: owner token or user roles (`admin`, `staff`, `viewer`) via `X-User-ID` + `BusinessUser` membership gate dashboard and CRM routes; writes require `admin/owner/staff`, reads allow `viewer`.

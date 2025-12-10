@@ -65,6 +65,12 @@ class OAuthSettings(BaseModel):
     )
 
 
+class EmailSettings(BaseModel):
+    provider: str = os.getenv("EMAIL_PROVIDER", "stub")  # "stub", "gmail", "sendgrid"
+    from_email: str | None = os.getenv("EMAIL_FROM")
+    sendgrid_api_key: str | None = os.getenv("SENDGRID_API_KEY")
+
+
 class SmsSettings(BaseModel):
     provider: str = "stub"  # "stub" or "twilio"
     from_number: str | None = None
@@ -136,6 +142,7 @@ class AppSettings(BaseModel):
     speech: SpeechSettings = SpeechSettings()
     nlu: NluSettings = NluSettings()
     oauth: OAuthSettings = OAuthSettings()
+    email: EmailSettings = EmailSettings()
     sms: SmsSettings = SmsSettings()
     telephony: TelephonySettings = TelephonySettings()
     quickbooks: QuickBooksSettings = QuickBooksSettings()
@@ -242,6 +249,11 @@ class AppSettings(BaseModel):
                 "GCALENDAR_SCOPES",
                 "openid email profile https://www.googleapis.com/auth/calendar.events.readonly",
             ),
+        )
+        email = EmailSettings(
+            provider=os.getenv("EMAIL_PROVIDER", "stub"),
+            from_email=os.getenv("EMAIL_FROM"),
+            sendgrid_api_key=os.getenv("SENDGRID_API_KEY"),
         )
         sms = SmsSettings(
             provider=os.getenv("SMS_PROVIDER", "stub"),
@@ -350,6 +362,7 @@ class AppSettings(BaseModel):
             speech=speech,
             nlu=nlu,
             oauth=oauth,
+            email=email,
             sms=sms,
             telephony=telephony,
             quickbooks=quickbooks,
@@ -389,6 +402,11 @@ class AppSettings(BaseModel):
             warnings.append("OPENAI_API_KEY is required when SPEECH_PROVIDER=openai.")
         if self.quickbooks.client_id and not self.quickbooks.client_secret:
             warnings.append("QBO_CLIENT_SECRET is missing while QBO_CLIENT_ID is set.")
+        if getattr(self, "email", None):
+            if self.email.provider == "sendgrid" and not self.email.sendgrid_api_key:
+                warnings.append(
+                    "SENDGRID_API_KEY is required when EMAIL_PROVIDER=sendgrid."
+                )
         if warnings:
             for msg in warnings:
                 logger.warning("configuration_warning", extra={"detail": msg})

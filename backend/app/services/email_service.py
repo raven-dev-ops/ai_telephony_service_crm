@@ -4,6 +4,7 @@ import base64
 import logging
 import time
 from dataclasses import dataclass
+import asyncio
 from typing import List, Optional
 
 import httpx
@@ -32,11 +33,10 @@ class EmailResult:
 
 
 class EmailService:
-    """Lightweight Gmail-based email sender with stub fallback.
+    """Lightweight email sender with Gmail (per-tenant OAuth) or SendGrid support.
 
-    Uses per-tenant OAuth tokens stored in oauth_store under provider "gmail".
-    When Gmail is not configured, messages are recorded locally for testing and
-    stubbed as unsent.
+    When neither provider is configured, messages are recorded locally for
+    observability and treated as stubbed/unsent.
     """
 
     def __init__(self) -> None:
@@ -97,6 +97,50 @@ class EmailService:
         # Stub refresh path.
         return oauth_store.refresh("gmail", business_id)
 
+    async def _send_via_sendgrid(
+        self,
+        to: str,
+        subject: str,
+        body: str,
+        from_email: str,
+        api_key: str,
+        attempts: int = 3,
+    ) -> EmailResult:
+        url = "https://api.sendgrid.com/v3/mail/send"
+        headers = {"Authorization": f"Bearer {api_key}"}
+        payload = {
+            "personalizations": [{"to": [{"email": to}]}],
+            "from": {"email": from_email},
+            "subject": subject,
+            "content": [{"type": "text/plain", "value": body}],
+        }
+        for attempt in range(attempts):
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(url, headers=headers, json=payload)
+                if 200 <= resp.status_code < 300:
+                    return EmailResult(sent=True, detail=None, provider="sendgrid")
+                logger.warning(
+                    "email_send_failed",
+                    extra={
+                        "provider": "sendgrid",
+                        "status": resp.status_code,
+                        "attempt": attempt + 1,
+                    },
+                )
+                if resp.status_code < 500:
+                    break
+            except Exception:
+                logger.warning(
+                    "email_send_exception",
+                    exc_info=True,
+                    extra={"provider": "sendgrid", "attempt": attempt + 1},
+                )
+            await asyncio.sleep(0.2 * (attempt + 1))
+        return EmailResult(
+            sent=False, detail="SendGrid send failed", provider="sendgrid"
+        )
+
     async def send_email(
         self,
         to: str,
@@ -107,8 +151,9 @@ class EmailService:
         from_email: str | None = None,
     ) -> EmailResult:
         settings = get_settings()
-        gmail_cfg = settings.oauth
-        provider = "gmail"
+        email_cfg = getattr(settings, "email", None)
+        provider = (getattr(email_cfg, "provider", "stub") or "stub").lower()
+        from_default = from_email or (getattr(email_cfg, "from_email", None) if email_cfg else None)
         # Always record locally for observability.
         self._sent.append(
             SentEmail(
@@ -120,47 +165,72 @@ class EmailService:
             )
         )
 
-        if not business_id:
-            return EmailResult(sent=False, detail="Missing business_id", provider="stub")
+        if not to:
+            return EmailResult(sent=False, detail="Missing recipient", provider="stub")
 
-        # Pull tokens and refresh if close to expiry.
-        try:
-            tok = await self._refresh_token_if_needed(
-                business_id, gmail_cfg.google_client_id, gmail_cfg.google_client_secret
-            )
-        except KeyError:
-            tok = None
-        if not tok:
-            return EmailResult(
-                sent=False, detail="Gmail tokens not found for tenant", provider="stub"
-            )
+        if provider == "sendgrid":
+            api_key = getattr(email_cfg, "sendgrid_api_key", None) if email_cfg else None
+            if not api_key:
+                return EmailResult(
+                    sent=False, detail="SendGrid API key missing", provider="stub"
+                )
+            sender = from_default or "no-reply@example.com"
+            return await self._send_via_sendgrid(to, subject, body, sender, api_key)
 
-        if not from_email:
-            # When not provided, attempt to use the Gmail account; otherwise stub.
-            from_email = "me"
+        if provider == "gmail":
+            if not business_id:
+                return EmailResult(
+                    sent=False, detail="Missing business_id", provider="stub"
+                )
+            gmail_cfg = settings.oauth
+            # Pull tokens and refresh if close to expiry.
+            try:
+                tok = await self._refresh_token_if_needed(
+                    business_id, gmail_cfg.google_client_id, gmail_cfg.google_client_secret
+                )
+            except KeyError:
+                tok = None
+            if not tok:
+                return EmailResult(
+                    sent=False, detail="Gmail tokens not found for tenant", provider="stub"
+                )
 
-        raw = self._encode_message(from_email, to, subject, body)
-        headers = {"Authorization": f"Bearer {tok.access_token}"}
-        url = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post(url, headers=headers, json={"raw": raw})
-            if resp.status_code >= 200 and resp.status_code < 300:
-                return EmailResult(sent=True, detail=None, provider="gmail")
-            logger.warning(
-                "email_send_failed",
-                extra={"business_id": business_id, "status": resp.status_code, "body": resp.text},
-            )
+            sender = from_default or "me"
+            raw = self._encode_message(sender, to, subject, body)
+            headers = {"Authorization": f"Bearer {tok.access_token}"}
+            url = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
+            attempts = 3
+            for attempt in range(attempts):
+                try:
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        resp = await client.post(url, headers=headers, json={"raw": raw})
+                    if 200 <= resp.status_code < 300:
+                        return EmailResult(sent=True, detail=None, provider="gmail")
+                    logger.warning(
+                        "email_send_failed",
+                        extra={
+                            "business_id": business_id,
+                            "status": resp.status_code,
+                            "body": resp.text,
+                            "attempt": attempt + 1,
+                        },
+                    )
+                    if resp.status_code < 500:
+                        break
+                except Exception:
+                    logger.exception(
+                        "email_send_exception",
+                        extra={"business_id": business_id, "provider": "gmail", "attempt": attempt + 1},
+                    )
+                await asyncio.sleep(0.2 * (attempt + 1))
             return EmailResult(
                 sent=False,
-                detail=f"Gmail send failed ({resp.status_code})",
+                detail="Gmail send failed",
                 provider="gmail",
             )
-        except Exception:
-            logger.exception(
-                "email_send_exception", extra={"business_id": business_id, "provider": "gmail"}
-            )
-            return EmailResult(sent=False, detail="Exception during send", provider="gmail")
+
+        # Stub/default path.
+        return EmailResult(sent=False, detail="Email provider not configured", provider="stub")
 
     async def notify_owner(
         self,

@@ -26,6 +26,7 @@ Release notes here summarize work that implements or documents the design descri
 - Added per-tenant Twilio number support (`twilio_phone_number`), owner onboarding Twilio provisioning (`/v1/owner/twilio/provision`), and admin Stripe health monitoring (`/v1/admin/stripe/health` + dashboard card) covering config readiness, webhook failures, and subscription usage.
 - Added owner QuickBooks link/pending approvals view (`/v1/owner/qbo/summary`, `/pending`), owner notifications (`/v1/owner/qbo/notify`), and a dashboard card to surface pending QBO insertions.
 - Owner dashboard polish: quick actions + plan badge, data-strip status pills, intent/voice chips; conversation & callback cards gained client-side filters (search/channel/status), newest/oldest sorting, live summaries, CSV/phone copy shortcuts, and “last updated” stamps for schedule/callbacks/conversations/service metrics.
+- Email delivery now supports Gmail (per-tenant OAuth) and SendGrid providers with retry/backoff, configuration validation, and stubbed fallbacks.
 - Twilio voice streaming now enqueues missed/partial calls into the callback queue, sends owner alerts, and includes signature validation tests for voice and status webhooks.
 
 
