@@ -46,10 +46,10 @@ jobs:
         working-directory: backend
         run: |
           python - <<'PY'
-import os
-for k in ["SMS_PROVIDER","SMS_FROM_NUMBER","VERIFY_TWILIO_SIGNATURES","STRIPE_USE_STUB","STRIPE_VERIFY_SIGNATURES"]:
-    print(f"{k}={os.getenv(k)}")
-PY
+          import os
+          for k in ["SMS_PROVIDER","SMS_FROM_NUMBER","VERIFY_TWILIO_SIGNATURES","STRIPE_USE_STUB","STRIPE_VERIFY_SIGNATURES"]:
+              print(f"{k}={os.getenv(k)}")
+          PY
 
       - name: Run ruff (lint)
         working-directory: backend

@@ -17,23 +17,24 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
+        working-directory: backend
         run: |
           python -m pip install --upgrade pip
-          pip install -r backend/requirements.txt
+          pip install -e .[dev]
       - name: Run app startup in prod mode (expect failure without secrets)
         working-directory: backend
         env:
           ENVIRONMENT: prod
         run: |
           python - <<'PY'
-import sys
-try:
-    from app.main import create_app
-    create_app()
-except RuntimeError as exc:
-    # Expected failure when prod env vars are missing
-    print("Expected failure:", exc)
-    sys.exit(0)
-print("ERROR: app started in prod mode without required config")
-sys.exit(1)
-PY
+          import sys
+          try:
+              from app.main import create_app
+              create_app()
+          except RuntimeError as exc:
+              # Expected failure when prod env vars are missing
+              print("Expected failure:", exc)
+              sys.exit(0)
+          print("ERROR: app started in prod mode without required config")
+          sys.exit(1)
+          PY
