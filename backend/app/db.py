@@ -274,6 +274,18 @@ def init_db() -> None:
                     conn.exec_driver_sql(
                         "ALTER TABLE businesses ADD COLUMN gcalendar_token_expires_at TIMESTAMP NULL"
                     )
+                if "gmail_access_token" not in cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE businesses ADD COLUMN gmail_access_token TEXT NULL"
+                    )
+                if "gmail_refresh_token" not in cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE businesses ADD COLUMN gmail_refresh_token TEXT NULL"
+                    )
+                if "gmail_token_expires_at" not in cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE businesses ADD COLUMN gmail_token_expires_at TIMESTAMP NULL"
+                    )
                 if "integration_openai_status" not in cols:
                     conn.exec_driver_sql(
                         "ALTER TABLE businesses ADD COLUMN integration_openai_status VARCHAR(32) NULL"

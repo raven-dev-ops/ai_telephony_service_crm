@@ -46,6 +46,36 @@ class EmailService:
     def sent_messages(self) -> List[SentEmail]:
         return list(self._sent)
 
+    def _load_gmail_tokens_from_db(self, business_id: str):
+        from ..db import SQLALCHEMY_AVAILABLE, SessionLocal
+        from ..db_models import BusinessDB
+
+        if not (SQLALCHEMY_AVAILABLE and SessionLocal is not None):
+            return None
+        session = SessionLocal()
+        try:
+            row = session.get(BusinessDB, business_id)
+            if not row:
+                return None
+            if getattr(row, "gmail_access_token", None) and getattr(
+                row, "gmail_refresh_token", None
+            ):
+                expires_at = (
+                    row.gmail_token_expires_at.timestamp()
+                    if getattr(row, "gmail_token_expires_at", None)
+                    else time.time() + 3600
+                )
+                return oauth_store.save_tokens(
+                    "gmail",
+                    business_id,
+                    access_token=row.gmail_access_token,
+                    refresh_token=row.gmail_refresh_token,
+                    expires_in=int(expires_at - time.time()),
+                )
+        finally:
+            session.close()
+        return None
+
     def _encode_message(self, from_email: str, to: str, subject: str, body: str) -> str:
         raw = (
             f"From: {from_email}\r\n"
@@ -60,7 +90,7 @@ class EmailService:
     async def _refresh_token_if_needed(
         self, business_id: str, client_id: str | None, client_secret: str | None
     ):
-        tok = oauth_store.get_tokens("gmail", business_id)
+        tok = oauth_store.get_tokens("gmail", business_id) or self._load_gmail_tokens_from_db(business_id)
         if not tok:
             return None
         now = time.time()

@@ -239,6 +239,13 @@ async def auth_callback(
                 row.gcalendar_token_expires_at = datetime.now(UTC) + timedelta(
                     seconds=expires_in or 3600
                 )
+            if provider_norm == "gmail":
+                row.gmail_access_token = tok.access_token
+                row.gmail_refresh_token = tok.refresh_token
+                row.gmail_token_expires_at = datetime.now(UTC) + timedelta(
+                    seconds=expires_in or 3600
+                )
+            if provider_norm in {"gmail", "gcalendar"}:
                 session.add(row)
                 session.commit()
         except HTTPException as exc:
