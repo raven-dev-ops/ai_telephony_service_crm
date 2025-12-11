@@ -3568,6 +3568,7 @@
       let refreshToken = localStorage.getItem("owner_refresh_token") || "";
 
       let userEmail = localStorage.getItem("owner_user_email") || "";
+      let emailAlertsEnabled = localStorage.getItem("owner_email_alerts") === "true";
 
       let userRoles = JSON.parse(localStorage.getItem("owner_user_roles") || "[]");
 
@@ -8099,6 +8100,11 @@
 
         if (count) count.textContent = `Showing ${items.length} of ${callbackItems.length || items.length}`;
 
+        const emailToggle = document.getElementById("email-alerts-toggle");
+        if (emailToggle) {
+          emailToggle.checked = emailAlertsEnabled;
+        }
+
         list.innerHTML = items
 
           .map(
@@ -8870,6 +8876,10 @@ async function loadTeam() {
         document.getElementById("audit-actor-filter")?.addEventListener("change", loadAuditLog);
         document.getElementById("audit-method-filter")?.addEventListener("change", loadAuditLog);
         document.getElementById("audit-path-filter")?.addEventListener("change", loadAuditLog);
+        document.getElementById("email-alerts-toggle")?.addEventListener("change", (e) => {
+          emailAlertsEnabled = !!e.target.checked;
+          localStorage.setItem("owner_email_alerts", emailAlertsEnabled ? "true" : "false");
+        });
 
       }
 
