@@ -156,3 +156,78 @@ def test_gcalendar_tokens_persist_and_load(monkeypatch):
     finally:
         session.close()
     config.get_settings.cache_clear()
+
+
+def test_gcalendar_refresh_updates_db_and_store(monkeypatch):
+    from app.services import calendar as calendar_service
+
+    class DummyOAuth:
+        def __init__(self) -> None:
+            self.google_client_id = "cid"
+            self.google_client_secret = "secret"
+            self.redirect_base = "https://app.local/auth"
+            self.gmail_scopes = "scope"
+            self.gcalendar_scopes = "scope"
+
+    class DummySettings:
+        def __init__(self) -> None:
+            self.oauth = DummyOAuth()
+
+    class DummyResp:
+        status_code = 200
+        text = "ok"
+
+        def json(self):
+            return {
+                "access_token": "new_access",
+                "refresh_token": "new_refresh",
+                "expires_in": 1800,
+            }
+
+    class DummyClient:
+        def __init__(self, timeout=None):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, url, data=None, auth=None):
+            return DummyResp()
+
+    monkeypatch.setattr(
+        calendar_service, "httpx", type("X", (), {"Client": DummyClient})
+    )
+    monkeypatch.setattr(calendar_service, "get_settings", lambda: DummySettings())
+    oauth_store.save_tokens(
+        "gcalendar",
+        DEFAULT_BUSINESS_ID,
+        access_token="old_access",
+        refresh_token="old_refresh",
+        expires_in=3600,
+    )
+    session = SessionLocal()
+    try:
+        row = session.get(BusinessDB, DEFAULT_BUSINESS_ID)
+        row.gcalendar_access_token = "old_access"  # type: ignore[assignment]
+        row.gcalendar_refresh_token = "old_refresh"  # type: ignore[assignment]
+        row.gcalendar_token_expires_at = datetime.now(UTC) - timedelta(minutes=1)  # type: ignore[assignment]
+        session.add(row)
+        session.commit()
+    finally:
+        session.close()
+
+    tok = calendar_service._refresh_gcal_tokens(DEFAULT_BUSINESS_ID, DummySettings())
+    assert tok is not None
+    assert tok.access_token == "new_access"
+    assert tok.refresh_token == "new_refresh"
+
+    session = SessionLocal()
+    try:
+        row = session.get(BusinessDB, DEFAULT_BUSINESS_ID)
+        assert row.gcalendar_access_token == "new_access"  # type: ignore[union-attr]
+        assert row.gcalendar_refresh_token == "new_refresh"  # type: ignore[union-attr]
+    finally:
+        session.close()
