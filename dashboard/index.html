@@ -2941,6 +2941,8 @@
 
             <button id="owner-qbo-notify" type="button" class="secondary">Notify owner</button>
 
+            <span id="owner-qbo-pill" class="status-badge warning" aria-live="polite"></span>
+
           </div>
 
           <small id="owner-qbo-status" class="muted"></small>
@@ -5649,6 +5651,10 @@
 
         const statusEl = document.getElementById("owner-qbo-status");
 
+        const badgeEl = document.getElementById("owner-qbo-pill");
+
+        const connectBtn = document.getElementById("owner-qbo-connect");
+
         if (!content) return;
 
         content.innerHTML = '<div class="loading">Loading QuickBooks status...</div>';
@@ -5678,6 +5684,38 @@
             ? '<span class="status-badge success">Connected</span>'
 
             : '<span class="status-badge warning">Not connected</span>';
+
+          if (badgeEl) {
+
+            badgeEl.className = "status-badge " + (summary.connected ? "success" : summary.configured ? "warning" : "muted");
+
+            badgeEl.textContent = summary.connected ? "Connected" : summary.configured ? "Ready to link" : "Stub mode";
+
+          }
+
+          if (connectBtn) {
+
+            if (summary.connected) {
+
+              connectBtn.disabled = true;
+
+              connectBtn.textContent = "QuickBooks linked";
+
+            } else if (!summary.configured) {
+
+              connectBtn.disabled = true;
+
+              connectBtn.textContent = "Configure QBO first";
+
+            } else {
+
+              connectBtn.disabled = false;
+
+              connectBtn.textContent = "Link QuickBooks";
+
+            }
+
+          }
 
           const pendingItems = (pending.items || []).slice(0, 5);
 
@@ -5760,6 +5798,22 @@
           content.innerHTML = `<div class="error">Unable to load QuickBooks status.</div>`;
 
           if (statusEl) statusEl.textContent = err.message || "Error loading QuickBooks status.";
+
+          if (badgeEl) {
+
+            badgeEl.className = "status-badge warning";
+
+            badgeEl.textContent = "Status unknown";
+
+          }
+
+          if (connectBtn) {
+
+            connectBtn.disabled = false;
+
+            connectBtn.textContent = "Link QuickBooks";
+
+          }
 
         }
 
