@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import os
 from datetime import UTC, datetime, timedelta
 from html import escape
 import logging
@@ -731,7 +732,10 @@ async def twilio_owner_voice(
 </Response>
 """.strip()
                 return Response(content=twiml, media_type="text/xml")
-            if owner_phone and From and From != owner_phone:
+            require_owner_match = (
+                os.getenv("OWNER_VOICE_REQUIRE_MATCH", "false").lower() == "true"
+            )
+            if require_owner_match and owner_phone and From and From != owner_phone:
                 if language_code == "es":
                     safe_reply = escape(
                         "Esta línea está reservada para el dueño del negocio. "
