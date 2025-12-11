@@ -199,7 +199,12 @@ async def _classify_with_llm(text: str, history: list[str] | None = None) -> str
 async def classify_intent_with_metadata(
     text: str, business_id: str | None = None, history: list[str] | None = None
 ) -> dict:
-    """Return intent label with confidence and provider metadata."""
+    """Return intent label with confidence and provider metadata.
+
+    Guardrails:
+    - Emergencies remain deterministic from heuristics.
+    - LLM assists only when heuristic confidence is low; heuristic can still win.
+    """
     combined = " ".join([text or "", " ".join(history or [])]).strip()
     heuristic_intent, heuristic_confidence = _heuristic_intent_with_score(
         combined or text
@@ -215,9 +220,16 @@ async def classify_intent_with_metadata(
         if heuristic_intent not in {"emergency"} and heuristic_confidence < 0.8:
             llm_label = await _classify_with_llm(combined or text, history=history)
         if llm_label in INTENT_LABELS:
-            intent = llm_label
-            confidence = max(heuristic_confidence, 0.7)
-            chosen_provider = "openai"
+            confidence_floor = 0.65
+            # Prefer heuristic if it was already confident (non-fallback).
+            if heuristic_confidence >= confidence_floor and heuristic_intent != "other":
+                intent = heuristic_intent
+                confidence = heuristic_confidence
+                chosen_provider = "heuristic"
+            else:
+                intent = llm_label
+                confidence = max(heuristic_confidence, confidence_floor)
+                chosen_provider = "openai"
         elif llm_label:
             logger.debug(
                 "intent_llm_invalid_label",
