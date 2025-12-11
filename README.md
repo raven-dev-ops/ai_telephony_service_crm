@@ -3,371 +3,88 @@ AI Telephony Service & CRM for Trades
 
 ![Backend CI](https://github.com/raven-dev-ops/ai_telephony_service_crm/actions/workflows/backend-ci.yml/badge.svg)
 ![Perf Smoke](https://github.com/raven-dev-ops/ai_telephony_service_crm/actions/workflows/perf-smoke.yml/badge.svg)
+![Coverage](https://img.shields.io/badge/coverage-%E2%89%A585%25-brightgreen)
 
-This repository contains the design and a working prototype for an AI-powered telephony service and
-lightweight CRM tailored to small trades businesses, using **Bristol Plumbing (Merriam, KS)** as
-the reference customer. The assistant acts as a 24/7 virtual receptionist that can:
+AI-powered telephony and lightweight CRM for small trades businesses (reference tenant: Bristol Plumbing, Merriam KS). The assistant acts as a 24/7 virtual receptionist that answers calls/chats, triages emergencies, schedules on Google Calendar, and keeps a searchable history of customers and jobs.
 
-- Answer and triage inbound calls.
-- Capture caller details and problem descriptions by voice or chat.
-- Detect urgent plumbing emergencies (e.g., burst pipes, sewage backup).
-- Schedule, modify, and cancel appointments against Google Calendar.
-- Keep a searchable history of customers, jobs, and conversations.
-- Notify the business by SMS about new leads, emergencies, and changes.
-
-Quick Start (Development)
--------------------------
-
-To run the backend and dashboards locally:
-
-1. **Start the backend**
-   - From the repo root:
-     - `cd backend`
-     - `python -m venv .venv && .venv\Scripts\activate` (Windows) or `python -m venv .venv && source .venv/bin/activate` (Unix)
-     - `pip install -e .[dev]`
-   - Option A (simple defaults):
-     - `uvicorn app.main:app --reload`
-   - Option B (using the provided env profiles from the repo root):
-     - In-memory dev: `uvicorn app.main:app --reload --env-file ..\env.dev.inmemory`
-     - DB-backed dev: `uvicorn app.main:app --reload --env-file ..\env.dev.db`
-
-2. **Open the owner dashboard**
-   - From the repo root, open `dashboard/index.html` in a browser (filesystem or a simple static server).
-   - Set `X-API-Key` and `X-Owner-Token` in the header fields using the values from your tenant (`/v1/admin/businesses` or demo tenants).
-   - Use the cards for **Tomorrow’s Schedule**, **Today’s Jobs**, **Emergency Jobs**, and **Recent Conversations** to verify behaviour.
-
-3. **Open the admin dashboard (optional)**
-   - Open `dashboard/admin.html` in a browser.
-   - Enter `X-Admin-API-Key` and use the **Tenants**, **Tenant Usage**, and **Twilio / Webhook Health** cards to manage and inspect tenants.
-
-4. **Explore the API**
-- Visit `http://localhost:8000/docs` for interactive docs.
-- See `API_REFERENCE.md` for a route-by-route summary grouped by area (voice, telephony, Twilio, CRM, owner, admin, reminders, retention, widget).
-- Twilio voice streaming: set `TWILIO_STREAMING_ENABLED=true` and `TWILIO_STREAM_BASE_URL` (use your prod/staging host; dev stubs default to `wss://stream.stub.local/v1/twilio/voice-stream`).
-- Intent thresholds: set `NLU_INTENT_THRESHOLD` (0–1, default 0.35) or per-tenant `intent_threshold` to tighten/loosen assistant intent gating.
-- Example envs: `env.dev.inmemory`, `env.dev.db`, `env.dev.twilio` (local); stubbed `env.staging.stub` and `env.prod.stub` enable streaming with `TWILIO_STREAM_BASE_URL=wss://ai-telephony-backend-tcmgy2pf2a-uc.a.run.app/v1/twilio/voice-stream` and `NLU_INTENT_THRESHOLD=0.4`—replace with your real hosts/keys before deploying.
-- Investor brief: `/planner` serves the PLANNER.md HTML (also linked from the dashboard header as “Investor Brief”); dedicated dashboard view at `/dashboard/planner.html` embeds the brief alongside owner/admin links.
-
-5. **Try self-service signup & onboarding (optional)**
-   - Enable `ALLOW_SELF_SIGNUP=true` in your backend environment.
-   - Open `dashboard/signup.html` to create a new tenant via `/v1/public/signup`, then follow the flow into `dashboard/onboarding.html` to connect calendar, email, and other integrations.
-   - Onboarding supports QuickBooks connect + sample sync, or CSV contact import as an alternative data source; statuses/logging surface on the page.
-
-6. **Try the owner AI assistant (optional)**
-   - With the owner dashboard open, use the floating chat bubble to ask questions about metrics, data definitions, and operational policies.
-   - When configured with `SPEECH_PROVIDER=openai` and `OPENAI_API_KEY`, the backend answers via `/v1/owner/assistant/query` using local documentation plus the configured OpenAI chat model.
-7. **Install the AI chat PWA (mobile-friendly)**
-   - Open `chat/index.html` to load the installable chat experience (add it to your home screen for offline access).
-   - The PWA caches core assets, queues chat sends when offline via Background Sync, and reuses your `X-API-Key` or `X-Widget-Token` from the input fields.
-
-Dashboard productivity tips
----------------------------
-- Use the **quick actions** row atop `dashboard/index.html` to jump to billing, integrations, invites, chat, and onboarding.
-- Status strip shows plan + health; “last updated” stamps now appear on schedule, callbacks, conversations, and service metrics.
-- **Conversations**: filter by customer/outcome, channel (voice/SMS/chat), sort newest/oldest, and see live totals/channel/booked summary.
-- **Callbacks**: filter by phone/reason and status, sort newest/oldest, copy phone numbers inline, and download CSV for follow-up lists.
-
-Secret Management & Safety
---------------------------
-
-- Secrets are expected in environment variables; non-stub providers (Twilio, Stripe, OpenAI) require their keys to be set. Misconfigurations are logged as warnings at startup.
-- Email delivery: set `EMAIL_PROVIDER=sendgrid` with `SENDGRID_API_KEY` (and optional `EMAIL_FROM`), or `EMAIL_PROVIDER=gmail` when tenants authorize Gmail via OAuth; otherwise emails are stubbed but still logged.
-- Google Calendar: tenants authorize via `/auth/gcalendar/start`; when `CALENDAR_USE_STUB=false` their tokens drive availability and event writes, and `/v1/calendar/google/webhook` can receive update/cancel notifications to keep appointments in sync.
-- QuickBooks: authorize via `/v1/integrations/qbo/authorize`; when `QBO_CLIENT_ID`/`QBO_CLIENT_SECRET`/`QBO_REDIRECT_URI` are set, `/v1/integrations/qbo/sync` pushes customers + sales receipts (sandbox respected) with retries, and falls back to stubbed responses if not configured.
-- Stub/demo indicators: when providers are left in stub mode (Twilio/SMS/Stripe/OpenAI), dashboard and API responses remain functional but should be treated as demo. Set the corresponding env vars to move to live mode; guardrails avoid logging secrets and reject invalid keys. Stripe defaults to live in non-test environments; set `STRIPE_USE_STUB=true` explicitly if you want to demo without hitting Stripe.
-- Auth: passwords are bcrypt-hashed; `/v1/auth/login` returns JWT access + refresh tokens, `/v1/auth/refresh` rotates them, and reset/lockout/rate-limit defaults are configurable via `AUTH_*` env vars. Dashboard login uses these tokens and protects owner/admin views.
-- Billing/Stripe live flows: set `STRIPE_API_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_PRICE_*`, `STRIPE_CHECKOUT_SUCCESS_URL`, and `STRIPE_CHECKOUT_CANCEL_URL`; `/v1/billing/create-checkout-session` and `/v1/billing/portal-link` will create real Stripe Checkout + Customer Portal sessions (stub URLs only when `STRIPE_USE_STUB=true`). Stripe portal uses `STRIPE_BILLING_PORTAL_RETURN_URL` when set.
-- Stripe webhooks: when `STRIPE_USE_STUB=false`, configure `STRIPE_WEBHOOK_SECRET` (and optional `STRIPE_VERIFY_SIGNATURES` + `STRIPE_REPLAY_PROTECTION_SECONDS`, default 300s); `/v1/billing/webhook` verifies the `Stripe-Signature` header and rejects duplicate event IDs in that window.
-- Subscription gating: set `ENFORCE_SUBSCRIPTION=true` to block voice/chat/Twilio flows when status is not `active`/`trialing` (HTTP 402). Past-due/canceled tenants are surfaced in the dashboard, and webhook-driven payment failures trigger owner reminder emails.
-- Data retention: automated purge runs every `RETENTION_PURGE_INTERVAL_HOURS` (default 24; set to 0 to disable) and can be invoked manually via `/v1/admin/retention/prune`; audit history is available at `/v1/admin/retention/history`.
-- Dashboard/CRM RBAC: owner token or user roles (`admin`, `staff`, `viewer`) via `X-User-ID` + `BusinessUser` membership gate dashboard and CRM routes; writes require `admin/owner/staff`, reads allow `viewer`.
-- Chat observability: `/metrics/prometheus` exposes chat latency histogram + p50/p95/p99; conversation IDs are returned via `X-Conversation-ID` headers on `/v1/chat` and `/v1/chat/stream`.
-- Background jobs: in-process job queue for CSV imports (contacts) and optional reminder dispatch; job counters exported via `ai_telephony_job_queue_*` in `/metrics/prometheus`.
-- Accessibility: dashboard includes semantic labels/ARIA for nav and dialogs; ensure focus-visible styling remains and contrast meets WCAG AA.
-- A sanitized config summary is logged on boot; secret values are never logged.
-- Gitleaks runs in CI to prevent committing secrets; rotate keys promptly if exposure is suspected.
-- Rate limiting (auth/chat/webhooks/voice) is on by default:
-  - `RATE_LIMIT_PER_MINUTE` (default 120), `RATE_LIMIT_BURST` (default 20)
-  - `RATE_LIMIT_WHITELIST_IPS` for trusted sources (comma-separated).
-  - Exempt paths: `/healthz`, `/readyz`, `/metrics`, `/metrics/prometheus`.
-- Authentication: passwords are bcrypt-hashed; JWT access/refresh tokens guard protected APIs; lockout + reset flows:
-  - Lockout after `AUTH_FAILED_ATTEMPT_LIMIT` (default 5) bad logins for `AUTH_LOCKOUT_MINUTES` (default 15); `Retry-After` header returned when locked.
-  - Password reset endpoints: `/v1/auth/reset/init` (issues a token; surfaced in test mode) and `/v1/auth/reset/confirm`.
-  - Token lifetimes: `AUTH_ACCESS_TOKEN_EXPIRES_MINUTES`, `AUTH_REFRESH_TOKEN_EXPIRES_MINUTES`, reset TTL `AUTH_RESET_TOKEN_EXPIRES_MINUTES` (default 30).
-- Security headers/CSP:
-  - Enabled by default; override with `SECURITY_HEADERS_ENABLED=false` or custom `SECURITY_CSP`.
-  - HSTS enabled by default (`SECURITY_HSTS_ENABLED`, `SECURITY_HSTS_MAX_AGE`).
-- OAuth integrations (LinkedIn, Gmail/Google):
-  - Configure `LINKEDIN_CLIENT_ID/SECRET`, `GOOGLE_CLIENT_ID/SECRET`, `OAUTH_REDIRECT_BASE`, `AUTH_STATE_SECRET`.
-  - Start URLs: `/auth/{provider}/start?business_id=...` return real provider authorize URLs with signed state.
-  - Callbacks: `/auth/{provider}/callback?state=...&code=...` simulate token exchange; refresh/revoke endpoints provided.
-
-
-Source PDFs & Traceability
---------------------------
-
-All system behavior, architecture, and engineering practices are grounded in the PDFs in the repo
-root. This README is distilled from:
-
-- `Bristol_Plumbing_Analysis.pdf` - business profile, services, marketing posture, and call patterns.
-- `Bristol_Plumbing_Implementation.pdf` - AI assistant implementation concept, business strategy,
-  and channel roadmap.
-- `Bristol_Plumbing_Project_Plan.pdf` - feature set, phased requirements, and cloud architecture.
-- `Project_Engineering_Whitepaper.pdf` - RavDevOps engineering culture and safety standard that
-  governs code, operations, and testing.
-- `Project_Tasklist.pdf` - current end-to-end task list (supersedes earlier task list docs).
-
-Other root docs (`OUTLINE.md`, `BACKLOG.md`, `WIKI.md`, `SECURITY.md`, `PRIVACY_POLICY.md`,
-`TERMS_OF_SERVICE.md`, `RUNBOOK.md`, `PILOT_RUNBOOK.md`, `DEPLOYMENT_CHECKLIST.md`) are similarly
-derived from these PDFs and should be treated as the design ground truth. When in doubt about
-behavior or trade-offs, prefer the intent described in these PDFs and keep changes boring,
-observable, and easy to roll back, in line with the RavDevOps engineering standard.
-
-
-Project Goals
--------------
-
-The goals of this project are to:
-
-- **Never miss a call or lead** for a one-person plumbing operation.
-- **Automate scheduling** via natural voice interaction with Google Calendar integration.
-- **Maintain a CRM-like history** of customers, jobs, and conversations in the cloud.
-- **Provide a secure business dashboard** for reviewing logs, appointments, analytics, and QA.
-- **Support emergency workflows**, tagging and escalating high-priority jobs.
-- **Respect privacy and security**, aligning with the RavDevOps engineering standard.
-
-Although the initial reference implementation is for Bristol Plumbing (Kansas City metro,
-specializing in tankless water heaters and full-service plumbing), the architecture is designed to
-generalize to other trades (HVAC, electrical, home services, etc.).
-
-
-High-Level Capabilities
+Quick Start (local dev)
 -----------------------
+1) Backend  
+   ```bash
+   cd backend
+   python -m venv .venv && .venv\Scripts\activate  # Windows
+   # or: source .venv/bin/activate                # Unix
+   pip install -e .[dev]
+   uvicorn app.main:app --reload                  # uses defaults
+   # or use provided envs:
+   #   uvicorn app.main:app --reload --env-file ..\env.dev.inmemory
+   #   uvicorn app.main:app --reload --env-file ..\env.dev.db
+   ```
 
-The system is designed to support:
+2) Owner dashboard  
+   - Open `dashboard/index.html` (file:// or `python -m http.server` from repo root).  
+   - Set `X-API-Key` and `X-Owner-Token` from your tenant (`/v1/admin/businesses`).  
+   - Quick investor view: `/planner` serves the PLANNER.md HTML; `dashboard/planner.html` embeds it alongside owner/admin links.
 
-- **Voice assistant for call handling**
-  - Natural conversation to gather name, address, issue, and scheduling preferences.
-  - Detection of emergencies (keywords such as "burst", "flood", "no water", "sewage").
-  - Voice interaction for the owner (e.g., "What's on my schedule tomorrow?").
+3) Admin dashboard (optional)  
+   - Open `dashboard/admin.html`; supply `X-Admin-API-Key`.  
+   - Use Tenants, Usage, Twilio/Stripe health cards to verify config.
 
-- **Scheduling & calendar integration**
-  - Real-time availability checks against Google Calendar.
-  - Appointment creation, updates, and cancellations.
-  - Configurable default durations per service type (e.g., 1 hr faucet fix, 4 hr tankless install).
+4) Self-service signup/onboarding (optional)  
+   - Set `ALLOW_SELF_SIGNUP=true`; open `dashboard/signup.html` then `dashboard/onboarding.html` to connect calendar/email/QBO stubs.
 
-- **Customer data & CRM**
-  - Cloud database of customers, service history, and appointments.
-  - Recognition of repeat customers by phone or name with auto-population of details.
-  - CSV import available at `POST /v1/contacts/import` (Name, Phone, Email, Address) for small owner-managed lists.
-  - Linkage of conversations, jobs, and (in the Bristol example) external invoicing.
+5) Owner AI assistant  
+   - Ask questions via the floating chat bubble.  
+   - Rich answers require `SPEECH_PROVIDER=openai` and `OPENAI_API_KEY`; otherwise you get a metrics snapshot fallback.
 
-- **Owner AI assistant (doc-grounded Q&A)**
-  - Owner dashboard chat bubble that lets owners ask free-form questions about metrics, dashboards, data semantics, and operating procedures.
-  - Implemented via `POST /v1/owner/assistant/query` and backed by local documentation plus the configured OpenAI chat model when `SPEECH_PROVIDER=openai` and `OPENAI_API_KEY` are set. A business-context chat endpoint at `POST /v1/chat` uses the same assistant with live tenant context and logs each conversation.
-
-- **Self-service signup & onboarding**
-  - Opt-in public signup endpoint (`/v1/public/signup`) and static pages (`dashboard/signup.html`, `dashboard/onboarding.html`) that let new service businesses onboard themselves when `ALLOW_SELF_SIGNUP=true`.
-  - Auth integration stubs under `/auth/{provider}/*` sketch how to connect LinkedIn, Gmail/Workspace, Google Calendar, OpenAI, and Twilio during onboarding.
-  - Twilio number provisioning/attachment for tenants via `/v1/owner/twilio/provision`; onboarding UI lets owners attach an existing Twilio/Hosted-SMS number or auto-purchase a toll-free number and wires webhooks accordingly.
-  - QuickBooks stub: `/v1/integrations/qbo/authorize`, `/callback`, `/status`, `/sync`; owner dashboard card uses `/v1/owner/qbo/summary`, `/pending`, and `/notify` to show pending approvals and send owner notifications.
-  - Billing stub: `/v1/billing/plans`, `/v1/billing/create-checkout-session`, `/v1/billing/webhook` with per-tenant subscription fields.
-  - Multi-tenant account model (stub): `/v1/auth/register`, `/v1/auth/me`, `/v1/auth/active-business` track users, roles, and active business.
-
-- **Business dashboard (web)**
-  - Conversation log viewer for QA and training.
-  - Calendar-style view and job list.
-  - Basic analytics (jobs per week, revenue estimates, common service locations/services).
-  - Configuration of business hours, services, and emergency rules.
-
-- **Notifications & messaging**
-  - SMS alerts to the owner for new leads and emergency calls.
-  - SMS confirmations and reminders to customers.
-  - Support for standard SMS opt-out keywords (e.g., STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT)
-    so customers can stop receiving text messages while owner alerts continue.
-  - Simple retention SMS campaigns for lapsed customers via the `/v1/retention/send-retention` endpoint.
-- **QuickBooks (stubbed)**
-  - OAuth flow via `/v1/integrations/qbo/authorize` and `/callback` (stores tokens/status per tenant).
-  - Status and sample sync via `/v1/integrations/qbo/status` and `/v1/integrations/qbo/sync` (imports sample contacts).
-
-- **Future channels**
-  - Website chatbot or voice widget using the same backend.
-  - Multi-tenant support for multiple trades businesses.
-
-
-Architecture Overview
----------------------
-
-From `Bristol_Plumbing_Project_Plan.pdf`, the target architecture consists of:
-
-- **Voice Assistant Backend (Python/FastAPI)**
-  - REST API using FastAPI.
-  - Speech-to-text (STT) using an accurate, low-latency model (e.g., Whisper or similar).
-  - Text-to-speech (TTS) using a high-quality, near real-time model.
-  - Dialogue / intent layer (currently rule-driven, with room for LLM-backed flows).
-  - Business logic for scheduling, CRM operations, and emergency handling.
-  - Integrations with Google Calendar, SMS gateway, and a cloud database.
-
-- **Owner & Admin Dashboards (web, static HTML/JS)**
-  - `dashboard/index.html`: owner dashboard for schedule, analytics, and QA.
-  - `dashboard/admin.html`: admin dashboard for tenant management, usage, and Twilio/webhook health.
-  - Both talk to the backend via JSON APIs using `X-API-Key`, `X-Owner-Token`, and `X-Admin-API-Key`.
-
-- **Website widget**
-  - `widget/chat.html` and `widget/embed.js` for a lightweight web chat experience.
-  - Uses `X-Widget-Token` so tenants do not expose their `api_key` in browser code.
-
-For more detail on phases, technical components, and engineering practices, see `OUTLINE.md`,
-`ENGINEERING.md`, and `API_REFERENCE.md`.
-
-Service Components
+Feature highlights
 ------------------
+- Voice/chat assistant with deterministic emergency routing and optional OpenAI intent assist.
+- Scheduling with Google Calendar; reschedule/cancel flows and SMS confirmations.
+- CRM: customers, appointments, conversations, CSV import, retention campaigns.
+- Owner/admin dashboards: schedules, callbacks/voicemails, analytics, Twilio/Stripe health.
+- Self-service signup/onboarding, per-tenant API and widget tokens, subscription gating with grace and limits.
+- Notifications: owner alerts for emergencies/missed calls/voicemail; customer reminders and opt-out handling.
 
-- `backend/app/services/conversation.py`: core dialogue flow/state machine for voice and SMS sessions.
-- `backend/app/services/sessions.py`: pluggable session store (memory by default; set `SESSION_STORE_BACKEND=redis` and `REDIS_URL` to externalize state for multi-replica deployments).
-- `backend/app/services/stt_tts.py`: speech service with swap-in providers (stub vs. OpenAI) for STT/TTS.
-- `backend/app/services/sms.py`: SMS abstraction (stub vs. Twilio) plus owner/customer notification helpers.
-- `backend/app/routers/telephony.py` and `backend/app/routers/twilio_integration.py`: HTTP adapters for voice/SMS webhooks.
-- `backend/app/routers/owner.py` and `backend/app/routers/crm.py`: owner dashboard and CRM APIs backed by repositories in `backend/app/repositories.py`.
-- Mapping & geo: owner dashboards can render a service map using `/v1/owner/geo/markers`; set `GOOGLE_MAPS_API_KEY` to enable server-side geocoding, otherwise the map gracefully shows “no geocoded appointments.”
-
-
-Owner Dashboard
----------------
-
-Open `dashboard/index.html` in a browser (either directly from the filesystem or via a static file
-server such as `python -m http.server` from the repo root).
-
-By default the owner dashboard targets a backend at `http://localhost:8000`. You can override this
-for staging/production by:
-
-- Passing a `backend_base` query parameter, e.g. `index.html?backend_base=https://api.example.com`.
-- Defining `window.BACKEND_BASE_URL = "https://api.example.com"` before the dashboard script tag.
-
-The owner dashboard primarily calls:
-
-- `/v1/owner/schedule/tomorrow` and `/v1/owner/schedule/tomorrow/audio` - tomorrow's schedule
-  (text + voice-friendly summary).
-- `/v1/owner/summary/today` and `/v1/owner/summary/today/audio` - summary of today's jobs.
-- `/v1/owner/reschedules` - appointments marked for rescheduling.
-- `/v1/owner/sms-metrics` - SMS usage (owner vs. customer) for the current tenant.
-- `/v1/owner/twilio-metrics` - Twilio webhook usage (voice/SMS requests and errors) for the
-  current tenant.
-- `/v1/owner/service-mix?days=N` - recent service mix (per service type, including emergency counts).
-- `/v1/owner/export/service-mix.csv?days=N` - CSV export of service-mix for this tenant.
-- `/v1/owner/export/conversations.csv?days=N` - CSV export of conversations for this tenant.
-- `/v1/owner/business` - current tenant label (id/name) shown in the header.
-- `/v1/crm/appointments` and `/v1/crm/conversations` - data for analytics and QA cards.
-
-The dashboard is intentionally simple HTML+JS and uses `X-API-Key` and `X-Owner-Token` headers to
-identify the tenant and authorize access.
-
-
-Admin Dashboard
----------------
-
-Open `dashboard/admin.html` in a browser to manage tenants and view platform-wide usage.
-
-Configure:
-
-- `ADMIN_API_KEY` in the backend environment and supply it as `X-Admin-API-Key` in the dashboard.
-
-Key endpoints used:
-
-- `/v1/admin/businesses` - list tenants and basic config.
-- `/v1/admin/businesses/usage` and `/v1/admin/businesses/usage.csv` - per-tenant usage and CSV export,
-  including counts of appointments, emergencies, SMS volume (owner vs. customer), pending
-  reschedules, and service-type mix.
-- `/v1/admin/twilio/health` - Twilio/webhook configuration and metrics, including per-tenant
-  voice/SMS request and error counts.
-- `/v1/admin/stripe/health` - Stripe config readiness (keys/prices/webhook secret), subscription
-  activation/failure/webhook failure counters, and subscription status coverage.
-- `/v1/owner/qbo/summary`, `/v1/owner/qbo/pending`, `/v1/owner/qbo/notify` - owner QuickBooks
-  link status, pending approval items, and SMS/email (stub) notifications.
-- `PATCH /v1/admin/businesses/{business_id}` - update status and notification fields.
-- `POST /v1/admin/businesses/{business_id}/rotate-key` - rotate per-tenant API keys.
-- `POST /v1/admin/businesses/{business_id}/rotate-widget-token` - rotate per-tenant widget tokens.
-
-Operations & Incidents
+Architecture (capsule)
 ----------------------
+- **Backend**: FastAPI, pluggable STT/TTS and intent (heuristics with optional OpenAI), repositories for appointments/conversations/customers.  
+- **Dashboards**: static HTML/JS (`dashboard/index.html`, `dashboard/admin.html`) using `X-API-Key`, `X-Owner-Token`, `X-Admin-API-Key`.  
+- **Widget**: `widget/chat.html` + `widget/embed.js` using `X-Widget-Token`.  
+- **Integrations**: Google Calendar, Twilio/SMS, Stripe, QBO, Gmail—all stubbed by default via env profiles (`env.*.stub`) with signature verification where applicable.
 
-- Prometheus rules live in `k8s/prometheus-rules.yaml`; critical alerts are labeled `page: "true"`.
-- Alertmanager wiring examples (Slack + email) in `k8s/alertmanager-config.example.yaml`.
-- Scenario runbooks: `INCIDENT_RESPONSE.md` plus post-incident checklist/template in
-  `POST_INCIDENT_TEMPLATE.md`.
+Safety, auth, and billing
+-------------------------
+- Secrets via env vars; stubs avoid real calls in dev/CI.  
+- Auth: bcrypt passwords, JWT access/refresh, lockout/reset, rate limits.  
+- Subscription enforcement: `ENFORCE_SUBSCRIPTION=true` blocks voice/chat when not active/trialing; grace reminders and plan caps included.  
+- Retention: periodic purge (`RETENTION_PURGE_INTERVAL_HOURS`), transcript capture is configurable (`capture_transcripts`, per-tenant retention opt-out).  
+- Webhooks: Twilio/Stripe signature verification and replay protection; owner/admin tokens required in prod (`OWNER_DASHBOARD_TOKEN`, `ADMIN_API_KEY`, `REQUIRE_BUSINESS_API_KEY=true`).
 
+Performance & load smoke (CI)
+-----------------------------
+- `tests/test_perf_smoke.py` – baseline perf for core flows.  
+- `tests/test_perf_multitenant_smoke.py` – multi-tenant path checks under load.  
+- `tests/test_perf_transcript_smoke.py` – long transcript handling.  
+- `tests/test_twilio_streaming_canary.py` – streaming canary (respects env secrets).  
+These run in `.github/workflows/perf-smoke.yml` on every push/PR.
 
-Twilio, SMS & Multi-Tenant Notes
---------------------------------
+Testing & coverage
+------------------
+- Coverage enforced at 85% in Backend CI; artifacts (`coverage.xml`) per Python version are uploaded in Actions → backend-ci artifacts.  
+- Lint/type/security: `ruff check .`, `black --check .`, `mypy`, `bandit`.  
+- Core suites: `pytest` (full), `tests/test_business_admin.py` for admin health (Twilio/Stripe), `tests/test_intent_and_retention.py` for safety/transcript opts, `tests/test_subscription_guardrails.py` for gating/limits.  
+- Providers are mocked/stubbed by default via `env.*.stub`; Twilio/Stripe/Google/QBO keys are never required to run tests locally or in CI.
 
-- **Twilio Voice/SMS webhooks**
-  - Voice: configure your Twilio number's Voice webhook to
-    `POST https://<your-domain>/twilio/voice` (optionally with `?business_id=<tenant_id>` for
-    per-tenant routing). The backend returns TwiML using `<Say>` + `<Gather input="speech">` so the
-    assistant can carry a natural conversation.
-  - SMS: configure the Messaging webhook to `POST https://<your-domain>/twilio/sms` (optionally
-    with `?business_id=<tenant_id>`). Incoming SMS are attached to a conversation keyed by
-    `(business_id, From)` and responded to via TwiML `<Message>...reply...</Message>`.
+Docs & references
+-----------------
+- Design and operating ground truth: `OUTLINE.md`, `BACKLOG.md`, `WIKI.md`, `ENGINEERING.md`, `SECURITY.md`, `PRIVACY_POLICY.md`, `TERMS_OF_SERVICE.md`, `RUNBOOK.md`, `DEPLOYMENT_CHECKLIST.md`, and the Bristol PDFs (`Bristol_Plumbing_*.pdf`, `Project_Engineering_Whitepaper.pdf`).  
+- API details: `API_REFERENCE.md`; data model: `DATA_MODEL.md`.  
+- Dev workflow: `DEV_WORKFLOW.md`, `TOOLS.md`.  
+- Incident playbooks: `INCIDENT_RESPONSE.md`, `POST_INCIDENT_TEMPLATE.md`.
 
-- **Customer SMS behavior**
-  - Standard opt-out keywords (`STOP`, `STOPALL`, `UNSUBSCRIBE`, `CANCEL`, `END`, `QUIT`) mark a
-    customer as opted out of customer-facing SMS for that tenant while leaving owner alerts
-    unaffected.
-  - Opt-in keywords (`START`, `UNSTOP`) clear the opt-out flag.
-  - Appointment flows:
-    - `YES` / `Y` / `CONFIRM` - confirm the next upcoming appointment.
-    - `NO` / `N` / `CANCEL` - cancel the next upcoming appointment and attempt to remove the
-      calendar event.
-    - `RESCHEDULE` or similar phrases - mark the appointment as `PENDING_RESCHEDULE` for human
-      follow-up.
-  - **Tenant-specific sending number**
-    - When a business has `twilio_phone_number` set, outbound SMS use that number; otherwise they
-      fall back to the global `SMS_FROM_NUMBER`. Owners can set/attach or auto-provision a number via
-      `/v1/owner/twilio/provision` (used by the onboarding UI).
-
-- **Multi-tenant usage & metrics**
-  - Each business (tenant) has:
-    - An `api_key` used as `X-API-Key` on CRM/owner/admin calls.
-    - A `widget_token` used as `X-Widget-Token` for the web chat widget.
-    - A `status` (`ACTIVE` / `SUSPENDED`) that controls whether Twilio/CRM/widget traffic is
-      served.
-    - A `twilio_phone_number` (optional) to send SMS from a per-tenant number when configured.
-  - `/metrics` exposes:
-    - Global counters (`total_requests`, `total_errors`, `appointments_scheduled`).
-    - Global SMS counters and `sms_by_business[business_id]` for owner vs. customer SMS volume.
-    - Global Twilio request/error counters and `twilio_by_business[business_id]` for per-tenant
-      voice/SMS request and error counts.
-    - Global voice-session counters and `voice_sessions_by_business[business_id]` for per-tenant
-      voice-session health.
-
-
-Where to Go Next
-----------------
-
-- For detailed architecture and phase breakdown, see `OUTLINE.md`.
-- For backlog items and feature planning, see `BACKLOG.md`.
-- For domain background and call-flow examples, see `WIKI.md`.
-- For security expectations, see `SECURITY.md`.
-- For privacy and terms baselines, see `PRIVACY_POLICY.md` and `TERMS_OF_SERVICE.md`.
-- For day-to-day operations, see `RUNBOOK.md` and `PILOT_RUNBOOK.md`.
-- For deployment steps, see `DEPLOYMENT_CHECKLIST.md`.
-- For a step-by-step local dev workflow, see `DEV_WORKFLOW.md` and `TOOLS.md`.
-
-All of these are anchored in the Bristol Plumbing PDFs and the RavDevOps engineering whitepaper.
-Any implementation should treat them as the reference when making changes or adding new features.
-
-Testing (key flows)
--------------------
-
-- Twilio admin health coverage: `python -m pytest tests/test_business_admin.py::test_admin_twilio_health_reflects_config_and_metrics`
-- Stripe admin health coverage: `python -m pytest tests/test_business_admin.py::test_admin_stripe_health_includes_config_and_usage`
-- Coverage artifacts: backend CI uploads `coverage.xml` per Python version (Actions → backend-ci artifacts) and enforces an 85% minimum.
-- Perf smoke: `pytest tests/test_perf_smoke.py tests/test_perf_multitenant_smoke.py tests/test_perf_transcript_smoke.py tests/test_twilio_streaming_canary.py` (also runs in `.github/workflows/perf-smoke.yml`).
-- Tests default to stubbed providers (Twilio/Stripe/Google/QBO) via env profiles (`env.*.stub`) to avoid real external calls.
-
-
-## New in this iteration
-- Dashboard shows a Callbacks & Voicemails card populated from missed/partial calls and voicemail captures.
-- Invite flow uses tokens; login has an invite acceptance form.
-- Perf smoke tests run in CI (`.github/workflows/perf-smoke.yml`).
-- Production safety: app now raises at startup in `ENVIRONMENT=prod` without `OWNER_DASHBOARD_TOKEN`, `ADMIN_API_KEY`, and `REQUIRE_BUSINESS_API_KEY=true`.
+New in this iteration
+---------------------
+- Subscription enforcement improved: grace reminders, plan cap warnings, and voicemail/callback surfacing on dashboard cards.  
+- Perf smoke and coverage badges visible; README streamlined for faster onboarding.  
+- Investor brief available at `/planner` and `dashboard/planner.html`.
