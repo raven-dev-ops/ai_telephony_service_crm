@@ -12,10 +12,11 @@ Quick map
 - Statement of Applicability: `STATEMENT_OF_APPLICABILITY.md`
 - Policies and processes:
   - Access control (SSO/MFA, joiner/mover/leaver): `ACCESS_CONTROL_POLICY.md`
+  - Access review evidence: `ACCESS_REVIEW_LOG.md`
   - Secure SDLC + CI/CD controls: `SECURE_SDLC.md`
   - Incident response and alerting: `INCIDENT_RESPONSE_PLAN.md`
   - Disaster recovery & business continuity: `DR_BCP.md`
-  - Backup and restore testing (RPO/RTO): `BACKUP_AND_RESTORE.md`
+  - Backup and restore testing (RPO/RTO): `BACKUP_AND_RESTORE.md` and `BACKUP_RESTORE_LOG.md`
   - Logging, monitoring, and alert rules: `LOGGING_AND_ALERTS.md`
   - Vendor inventory and DPAs: `VENDOR_REGISTER.md`
 - Audit cadence and certification plan: `AUDIT_AND_MANAGEMENT_REVIEW.md`
