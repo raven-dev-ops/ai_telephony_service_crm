@@ -5,7 +5,7 @@ Use this log to record each backup/restore drill with RPO/RTO measurements.
 
 | Date | Environment | Backup Timestamp | RPO (minutes) | RTO (minutes) | Validation (tests run) | Issues Found | Actions | Evidence Link |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2025-12-12 | Staging | | | | | | | |
+| 2025-12-12 | Staging | Not run (pending drill) | N/A | N/A | Not run | Drill not yet executed; automated Cloud SQL backups available (last success 2025-12-11 06:29 UTC). | Plan restore to staging + run smoke tests. | `gcloud sql backups list --instance=ai-telephony-db` (2025-12-12) |
 
 Checklist for each entry
 ------------------------
