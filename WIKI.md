@@ -34,7 +34,7 @@ the Bristol Plumbing PDFs and the RavDevOps engineering whitepaper.
 - **Recent dashboard updates**
   - Owner dashboard now has quick actions + plan/status strip, and "last updated" stamps on schedule, callbacks, conversations, and service metrics.
   - Conversations and callbacks gained filters (search/channel/status), newest/oldest sorting, live summaries, and clipboard/CSV helpers for faster follow-up.
-- Investor brief is available at `/planner` (also linked in the dashboard header as “Investor Brief”); dedicated investor dashboard lives at `/dashboard/planner.html`.
+- Investor brief is available at `/planner` (also linked in the dashboard header as "Investor Brief"); dedicated investor dashboard lives at `/dashboard/planner.html`.
 
 
 2. Personas & Users
