@@ -13,6 +13,8 @@ from ..config import get_settings
 from ..services.oauth_tokens import oauth_store
 from ..db import SQLALCHEMY_AVAILABLE, SessionLocal
 from ..db_models import BusinessDB
+from ..metrics import metrics
+from .alerting import record_notification_failure
 
 
 logger = logging.getLogger(__name__)
@@ -226,6 +228,7 @@ class EmailService:
 
         if not to:
             return EmailResult(sent=False, detail="Missing recipient", provider="stub")
+        metrics.notification_attempts += 1
 
         if provider == "sendgrid":
             api_key = (
@@ -321,13 +324,16 @@ class EmailService:
             return EmailResult(
                 sent=False, detail="Owner email not configured", provider="stub"
             )
-        return await self.send_email(
+        result = await self.send_email(
             to=to or "",
             subject=subject,
             body=body,
             business_id=business_id,
             from_email=to or None,
         )
+        if not result.sent:
+            record_notification_failure("email", detail=result.detail or "unknown")
+        return result
 
 
 email_service = EmailService()

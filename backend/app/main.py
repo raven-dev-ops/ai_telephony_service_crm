@@ -20,6 +20,7 @@ from .services.audit import record_audit_event
 from .services.retention_purge import start_retention_scheduler
 from .services.rate_limit import RateLimiter, RateLimitError
 from .services.job_queue import job_queue
+from .services import alerting
 from .routers import (
     business_admin,
     chat_widget,
@@ -355,6 +356,24 @@ def create_app() -> FastAPI:
             # Successful or handled responses are also audited.
             if not error_recorded:
                 await record_audit_event(request, response.status_code)
+            if path.startswith(("/twilio", "/v1/twilio")) and response.status_code >= 400:
+                metrics.twilio_webhook_failures += 1
+                if response.status_code >= 500:
+                    alerting.maybe_trigger_alert(
+                        "twilio_webhook_failure",
+                        detail=f"{path} status {response.status_code}",
+                        severity="P0",
+                        cooldown_seconds=180,
+                    )
+            if path.startswith("/v1/calendar") and response.status_code >= 400:
+                metrics.calendar_webhook_failures += 1
+                if response.status_code >= 500:
+                    alerting.maybe_trigger_alert(
+                        "calendar_webhook_failure",
+                        detail=f"{path} status {response.status_code}",
+                        severity="P0",
+                        cooldown_seconds=300,
+                    )
             response = _finalize_response(response)
             return response
         finally:
@@ -448,7 +467,10 @@ def create_app() -> FastAPI:
 
     @app.get("/metrics", tags=["metrics"])
     async def get_metrics() -> dict:
-        return metrics.as_dict()
+        payload = metrics.as_dict()
+        payload["slo_targets"] = alerting.SLO_TARGETS
+        payload["runbook_links"] = alerting.RUNBOOK_LINKS
+        return payload
 
     @app.get("/metrics/prometheus", tags=["metrics"])
     async def get_metrics_prometheus() -> Response:
@@ -473,9 +495,36 @@ def create_app() -> FastAPI:
         emit("ai_telephony_twilio_sms_requests", float(metrics.twilio_sms_requests))
         emit("ai_telephony_twilio_sms_errors", float(metrics.twilio_sms_errors))
         emit(
+            "ai_telephony_twilio_webhook_failures",
+            float(metrics.twilio_webhook_failures),
+        )
+        emit(
             "ai_telephony_voice_session_requests", float(metrics.voice_session_requests)
         )
         emit("ai_telephony_voice_session_errors", float(metrics.voice_session_errors))
+        emit(
+            "ai_telephony_calendar_webhook_failures",
+            float(metrics.calendar_webhook_failures),
+        )
+        emit(
+            "ai_telephony_notification_attempts",
+            float(metrics.notification_attempts),
+        )
+        emit(
+            "ai_telephony_notification_failures",
+            float(metrics.notification_failures),
+        )
+        emit("ai_telephony_alert_events_total", float(metrics.alert_events_total))
+        emit("ai_telephony_alerts_open", float(len(metrics.alerts_open)))
+        emit("ai_telephony_slo_uptime_target", float(alerting.SLO_TARGETS["uptime"]))
+        emit(
+            "ai_telephony_slo_booking_success_rate",
+            float(alerting.SLO_TARGETS["booking_success_rate"]),
+        )
+        emit(
+            "ai_telephony_slo_emergency_notify_p95_ms",
+            float(alerting.SLO_TARGETS["emergency_notify_p95_ms"]),
+        )
         emit(
             "ai_telephony_subscription_activations",
             float(metrics.subscription_activations),

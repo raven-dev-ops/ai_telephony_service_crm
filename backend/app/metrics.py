@@ -59,11 +59,16 @@ class CallbackItem:
 class Metrics:
     total_requests: int = 0
     total_errors: int = 0
+    alert_events_total: int = 0
+    alerts_open: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    alert_last_fired: Dict[str, str] = field(default_factory=dict)
     appointments_scheduled: int = 0
     users_registered: int = 0
     sms_sent_total: int = 0
     sms_sent_owner: int = 0
     sms_sent_customer: int = 0
+    notification_attempts: int = 0
+    notification_failures: int = 0
     lead_followups_sent: int = 0
     subscription_activations: int = 0
     subscription_failures: int = 0
@@ -104,6 +109,8 @@ class Metrics:
     twilio_voice_errors: int = 0
     twilio_sms_requests: int = 0
     twilio_sms_errors: int = 0
+    twilio_webhook_failures: int = 0
+    calendar_webhook_failures: int = 0
     twilio_by_business: Dict[str, BusinessTwilioMetrics] = field(default_factory=dict)
     voice_session_requests: int = 0
     voice_session_errors: int = 0
@@ -173,11 +180,16 @@ class Metrics:
         return {
             "total_requests": self.total_requests,
             "total_errors": self.total_errors,
+            "alert_events_total": self.alert_events_total,
+            "alerts_open": dict(self.alerts_open),
+            "alert_last_fired": dict(self.alert_last_fired),
             "appointments_scheduled": self.appointments_scheduled,
             "users_registered": self.users_registered,
             "sms_sent_total": self.sms_sent_total,
             "sms_sent_owner": self.sms_sent_owner,
             "sms_sent_customer": self.sms_sent_customer,
+            "notification_attempts": self.notification_attempts,
+            "notification_failures": self.notification_failures,
             "lead_followups_sent": self.lead_followups_sent,
             "subscription_activations": self.subscription_activations,
             "subscription_failures": self.subscription_failures,
@@ -234,6 +246,8 @@ class Metrics:
             "twilio_voice_errors": self.twilio_voice_errors,
             "twilio_sms_requests": self.twilio_sms_requests,
             "twilio_sms_errors": self.twilio_sms_errors,
+            "twilio_webhook_failures": self.twilio_webhook_failures,
+            "calendar_webhook_failures": self.calendar_webhook_failures,
             "twilio_by_business": {
                 business_id: {
                     "voice_requests": m.voice_requests,

@@ -9,6 +9,7 @@ from ..config import get_settings
 from ..db import SQLALCHEMY_AVAILABLE, SessionLocal
 from ..db_models import BusinessDB
 from ..metrics import BusinessSmsMetrics, metrics
+from .alerting import record_notification_failure
 
 
 @dataclass
@@ -52,6 +53,7 @@ class SmsService:
             SentMessage(to=to, body=body, business_id=business_id, category=category)
         )
         metrics.sms_sent_total += 1
+        metrics.notification_attempts += 1
 
         if business_id:
             per_tenant = metrics.sms_by_business.setdefault(
@@ -82,8 +84,9 @@ class SmsService:
             async with httpx.AsyncClient(timeout=10.0, auth=(sid, token)) as client:
                 resp = await client.post(url, data=data)
                 resp.raise_for_status()
-        except Exception:
+        except Exception as exc:
             # Swallow errors and rely on stub recording for diagnostics.
+            record_notification_failure("sms", detail=exc.__class__.__name__)
             return
 
     async def notify_owner(self, body: str, business_id: str | None = None) -> None:
