@@ -24,6 +24,7 @@ Implementation (stack)
     `gcloud alpha monitoring policies create --display-name=\"P0 Twilio webhook failures\" --condition-display-name=\"webhook failures\" --condition-filter=\"metric.type=\"logging.googleapis.com/user/twilio_webhook_failure\"\" --condition-compare=COMPARISON_GT --condition-threshold-value=5 --condition-duration=300s --notification-channels=<channel-ids>`
 - **Prometheus-style checks via GitHub Actions**: `.github/workflows/p0-alerts.yml` polls the `/metrics/prometheus` endpoint every 15 minutes. Configure repo secrets `METRICS_URL`, optional `METRICS_AUTH_HEADER`, thresholds (e.g., `TWILIO_WEBHOOK_THRESHOLD`, `CALENDAR_FAILURE_THRESHOLD`, `AUTH_FAILURE_THRESHOLD`, `OWNER_ALERT_FAILURE_THRESHOLD`), and optional `SLACK_WEBHOOK`. Workflow fails (and optionally posts to Slack) when thresholds are exceeded.
 - **Cloud Run 5xx alert (created)**: Alert policy `P0 Cloud Run 5xx (backend)` watches `run.googleapis.com/request_count` for `service_name=ai-telephony-backend` with `response_code_class=5xx`, threshold >0 over 5m, notifying channel `P0 Alerts Email` (damon.heath@ravdevops.com). Adjust notification channels as needed.
+- **Cloud SQL backup alert (created)**: Logs-based metric `cloudsql_backup_errors` (resource.type=cloudsql_database, severity>=ERROR with backup text/protoPayload) and alert policy `P0 Cloud SQL backup error` (threshold >0, immediate) notifying `P0 Alerts Email`.
 
 Dashboards
 ----------
