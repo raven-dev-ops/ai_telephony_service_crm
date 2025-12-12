@@ -13,6 +13,7 @@ from ..repositories import appointments_repo, customers_repo
 from ..services import conversation
 from ..services.sms import sms_service
 from ..services.job_queue import job_queue
+from ..services.email_service import EmailResult
 
 
 router = APIRouter()
@@ -158,3 +159,24 @@ async def send_unbooked_lead_followups(
         sent += 1
 
     return {"followups_sent": sent}
+
+
+@router.post("/owner-summary-email")
+async def send_owner_today_summary_email(
+    background: bool = False,
+    business_id: str = Depends(ensure_business_active),
+) -> dict:
+    """Send today's owner summary email (scheduler-friendly)."""
+
+    async def _run() -> EmailResult:
+        from . import owner as owner_routes  # local import to avoid cycles
+
+        result = await owner_routes.today_summary_email(business_id=business_id)
+        return EmailResult(sent=result.sent, detail=result.detail, provider=result.provider)
+
+    if background:
+        job_queue.enqueue(lambda: asyncio.run(_run()))
+        return {"queued": True, "sent": False}
+
+    result = await _run()
+    return {"queued": False, "sent": result.sent, "provider": result.provider, "detail": result.detail}

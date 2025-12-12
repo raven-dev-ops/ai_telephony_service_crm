@@ -11,6 +11,8 @@ import httpx
 
 from ..config import get_settings
 from ..services.oauth_tokens import oauth_store
+from ..db import SQLALCHEMY_AVAILABLE, SessionLocal
+from ..db_models import BusinessDB
 
 
 logger = logging.getLogger(__name__)
@@ -45,6 +47,27 @@ class EmailService:
     @property
     def sent_messages(self) -> List[SentEmail]:
         return list(self._sent)
+
+    def _mark_gmail_status(self, business_id: str, status: str) -> None:
+        """Best-effort update of Gmail integration status in the DB."""
+        if not (SQLALCHEMY_AVAILABLE and SessionLocal is not None):
+            return
+        session = SessionLocal()
+        try:
+            row = session.get(BusinessDB, business_id)
+            if not row:
+                return
+            row.integration_gmail_status = status  # type: ignore[assignment]
+            session.add(row)
+            session.commit()
+        except Exception:
+            logger.warning(
+                "email_status_update_failed",
+                exc_info=True,
+                extra={"business_id": business_id, "status": status},
+            )
+        finally:
+            session.close()
 
     def _load_gmail_tokens_from_db(self, business_id: str):
         from ..db import SQLALCHEMY_AVAILABLE, SessionLocal
@@ -249,6 +272,7 @@ class EmailService:
                             url, headers=headers, json={"raw": raw}
                         )
                     if 200 <= resp.status_code < 300:
+                        self._mark_gmail_status(business_id, "connected")
                         return EmailResult(sent=True, detail=None, provider="gmail")
                     logger.warning(
                         "email_send_failed",
@@ -271,6 +295,7 @@ class EmailService:
                         },
                     )
                 await asyncio.sleep(0.2 * (attempt + 1))
+            self._mark_gmail_status(business_id, "error")
             return EmailResult(
                 sent=False,
                 detail="Gmail send failed",

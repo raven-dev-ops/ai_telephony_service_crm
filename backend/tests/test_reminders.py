@@ -5,6 +5,9 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.repositories import appointments_repo, customers_repo
 from app.services.sms import sms_service
+from app.services.email_service import EmailResult
+from app.db import SessionLocal
+from app.db_models import BusinessDB
 
 
 client = TestClient(app)
@@ -143,3 +146,36 @@ def test_send_upcoming_reminders_skips_cancelled_and_past_appointments():
     assert body["reminders_sent"] == 0
     sent = sms_service.sent_messages
     assert sent == []
+
+
+def test_send_owner_summary_email(monkeypatch):
+    # Ensure owner email exists.
+    if SessionLocal is not None:
+        session = SessionLocal()
+        try:
+            row = session.get(BusinessDB, "default_business")
+            if row is not None:
+                row.owner_email = "owner@example.com"  # type: ignore[assignment]
+                row.owner_email_alerts_enabled = True  # type: ignore[assignment]
+                session.add(row)
+                session.commit()
+        finally:
+            session.close()
+
+    calls = {}
+
+    async def fake_notify_owner(subject, body, business_id=None, owner_email=None):
+        calls["subject"] = subject
+        calls["body"] = body
+        calls["business_id"] = business_id
+        calls["owner_email"] = owner_email
+        return EmailResult(sent=True, provider="stub")
+
+    monkeypatch.setattr("app.routers.owner.email_service.notify_owner", fake_notify_owner)
+
+    resp = client.post("/v1/reminders/owner-summary-email")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["sent"] is True
+    assert body["provider"] == "stub"
+    assert calls.get("owner_email") == "owner@example.com"

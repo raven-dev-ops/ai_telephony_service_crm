@@ -14,6 +14,7 @@ from .nlu import (
     parse_name,
     classify_intent_with_metadata,
 )
+from .email_service import email_service
 from . import subscription as subscription_service
 from ..config import get_settings
 from ..db import SQLALCHEMY_AVAILABLE, SessionLocal
@@ -833,6 +834,24 @@ class ConversationManager:
                     customer_body,
                     business_id=business_id,
                 )
+                customer_email = getattr(customer, "email", None)
+                if customer_email:
+                    # Best-effort email confirmation using the configured provider (Gmail/SendGrid/stub).
+                    email_subject = f"Appointment confirmed with {business_name}"
+                    email_body = customer_body
+                    try:
+                        await email_service.send_email(
+                            to=customer_email,
+                            subject=email_subject,
+                            body=email_body,
+                            business_id=business_id,
+                        )
+                    except Exception:
+                        logger.warning(
+                            "customer_email_confirmation_failed",
+                            exc_info=True,
+                            extra={"business_id": business_id},
+                        )
 
             session.stage = "COMPLETED"
             session.status = "SCHEDULED"

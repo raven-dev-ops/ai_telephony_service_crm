@@ -15,6 +15,7 @@ from app.services.conversation import (
     _normalize_lead_source,
     calendar_service,
 )
+from app.services.email_service import EmailResult
 from app.services.calendar import TimeSlot
 from app.services.sessions import CallSession
 from app.repositories import customers_repo
@@ -166,6 +167,56 @@ def test_conversation_spanish_greeting_and_repeat_name_prompt():
     session.stage = "ASK_NAME"
     repeat = run(manager.handle_input(session, ""))
     assert "no alcancé a escuchar tu nombre" in repeat.reply_text.lower()
+
+
+def test_conversation_sends_email_confirmation_when_customer_has_email(monkeypatch):
+    # Reset in-memory repos for a clean slate.
+    customers_repo._by_id.clear()
+    customers_repo._by_phone.clear()
+    customers_repo._by_business.clear()
+
+    # Seed customer with an email so confirmation can be sent.
+    customers_repo.upsert(
+        name="Email Customer",
+        phone="555-7777",
+        email="cust@example.com",
+        address="123 Main St, KC",
+        business_id="default_business",
+    )
+    session = CallSession(id="emailtest", caller_phone="555-7777")
+    manager = ConversationManager()
+
+    sent: list[dict] = []
+
+    class FakeEmailService:
+        async def send_email(
+            self, to=None, subject=None, body=None, business_id=None, from_email=None, **_
+        ):
+            sent.append(
+                {
+                    "to": to,
+                    "subject": subject,
+                    "body": body,
+                    "business_id": business_id,
+                }
+            )
+            return EmailResult(sent=True, provider="gmail")
+
+    # Patch email service used by the conversation manager.
+    import app.services.conversation as conversation_mod
+
+    monkeypatch.setattr(conversation_mod, "email_service", FakeEmailService())
+
+    # Walk through the happy path to schedule an appointment.
+    run(manager.handle_input(session, None))  # greeting
+    run(manager.handle_input(session, "Email Customer"))  # name
+    run(manager.handle_input(session, "123 Main St, KC MO"))  # address
+    run(manager.handle_input(session, "Kitchen sink leak"))  # problem
+    run(manager.handle_input(session, "yes"))  # accept scheduling
+    run(manager.handle_input(session, "yes"))  # confirm proposed slot
+
+    assert sent, "Expected an email confirmation to be sent"
+    assert sent[0]["to"] == "cust@example.com"
 
 
 def test_infer_service_type_basic_keywords():

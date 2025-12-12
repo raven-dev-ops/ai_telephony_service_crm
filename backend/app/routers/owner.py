@@ -226,6 +226,12 @@ class OwnerTodaySummaryResponse(BaseModel):
     standard_appointments: int
 
 
+class OwnerTodaySummaryEmailResponse(BaseModel):
+    sent: bool
+    provider: str
+    detail: str | None = None
+
+
 @router.get("/summary/today", response_model=OwnerTodaySummaryResponse)
 def today_summary(
     business_id: str = Depends(ensure_business_active),
@@ -277,6 +283,44 @@ async def today_summary_audio(
     voice = get_voice_for_business(business_id)
     audio = await speech_service.synthesize(base.reply_text, voice=voice)
     return OwnerTodaySummaryAudioResponse(reply_text=base.reply_text, audio=audio)
+
+
+@router.post("/summary/today/email", response_model=OwnerTodaySummaryEmailResponse)
+async def today_summary_email(
+    business_id: str = Depends(ensure_business_active),
+) -> OwnerTodaySummaryEmailResponse:
+    """Email today's summary to the owner when email alerts are enabled."""
+    owner_email = None
+    alerts_enabled = True
+    if SQLALCHEMY_AVAILABLE and SessionLocal is not None:
+        session = SessionLocal()
+        try:
+            row = session.get(BusinessDB, business_id)
+            if row is not None:
+                owner_email = getattr(row, "owner_email", None)
+                alerts_enabled = getattr(row, "owner_email_alerts_enabled", True)
+        finally:
+            session.close()
+    if not owner_email:
+        return OwnerTodaySummaryEmailResponse(
+            sent=False, provider="stub", detail="Owner email not configured"
+        )
+    if not alerts_enabled:
+        return OwnerTodaySummaryEmailResponse(
+            sent=False,
+            provider="stub",
+            detail="Owner email alerts disabled for this tenant",
+        )
+    summary = today_summary(business_id=business_id)
+    result = await email_service.notify_owner(
+        subject="Today's schedule summary",
+        body=summary.reply_text,
+        business_id=business_id,
+        owner_email=owner_email,
+    )
+    return OwnerTodaySummaryEmailResponse(
+        sent=result.sent, provider=result.provider, detail=result.detail
+    )
 
 
 class OwnerBusinessResponse(BaseModel):

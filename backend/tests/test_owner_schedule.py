@@ -6,6 +6,9 @@ from app.main import app
 from app.repositories import appointments_repo, customers_repo, conversations_repo
 from app.metrics import BusinessSmsMetrics, BusinessTwilioMetrics, metrics
 from app.deps import DEFAULT_BUSINESS_ID
+from app.services.email_service import EmailResult
+from app.db import SessionLocal
+from app.db_models import BusinessDB
 
 
 client = TestClient(app)
@@ -83,6 +86,39 @@ def test_owner_business_endpoint_returns_default_business():
     assert body["id"] == "default_business"
     assert isinstance(body["name"], str)
     assert body["name"]
+
+
+def test_owner_today_summary_email_respects_owner_email(monkeypatch):
+    # Ensure the default business has an owner email configured.
+    if SessionLocal is not None:
+        session = SessionLocal()
+        try:
+            row = session.get(BusinessDB, DEFAULT_BUSINESS_ID)
+            if row is not None:
+                row.owner_email = "owner@example.com"  # type: ignore[assignment]
+                row.owner_email_alerts_enabled = True  # type: ignore[assignment]
+                session.add(row)
+                session.commit()
+        finally:
+            session.close()
+
+    calls = {}
+
+    async def fake_notify_owner(subject, body, business_id=None, owner_email=None):
+        calls["subject"] = subject
+        calls["body"] = body
+        calls["business_id"] = business_id
+        calls["owner_email"] = owner_email
+        return EmailResult(sent=True, provider="stub")
+
+    monkeypatch.setattr("app.routers.owner.email_service.notify_owner", fake_notify_owner)
+
+    resp = client.post("/v1/owner/summary/today/email")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["sent"] is True
+    assert data["provider"] == "stub"
+    assert calls.get("owner_email") == "owner@example.com"
 
 
 def test_owner_schedule_audio_handles_synthesis_error(monkeypatch):

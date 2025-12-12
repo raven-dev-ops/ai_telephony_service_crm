@@ -40,9 +40,21 @@ class JobQueue:
             self._thread.join(timeout=2.0)
         logger.info("job_queue_stopped")
 
-    def enqueue(self, fn: Callable, *args: Any, **kwargs: Any) -> None:
-        """Enqueue a callable for background execution."""
-        self._queue.put((fn, args, kwargs))
+    def enqueue(self, fn: Callable | str, *args: Any, **kwargs: Any) -> None:
+        """Enqueue a callable for background execution.
+
+        Accepts either (callable, *args) or a legacy pattern where the first
+        argument is a string job name followed by the callable.
+        """
+        target = fn
+        remaining_args = args
+        if isinstance(fn, str) and args and callable(args[0]):
+            target = args[0]
+            remaining_args = args[1:]
+        if not callable(target):
+            logger.warning("job_queue_enqueue_invalid_target", extra={"fn": repr(fn)})
+            return
+        self._queue.put((target, remaining_args, kwargs))
 
     def _run(self) -> None:
         while not self._stop_event.is_set():

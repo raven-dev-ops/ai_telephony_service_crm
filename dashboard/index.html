@@ -1247,6 +1247,11 @@
 
       }
 
+      .integration-row.error .status {
+        background: #fef2f2;
+        color: #b91c1c;
+      }
+
 
 
       .tips-list {
@@ -5596,9 +5601,17 @@
 
             const label = escapeHtml(item?.label || item?.provider || "Integration");
 
-            const statusText = connected ? t("integration_connected") : t("integration_disconnected");
+            const statusRaw = (item?.status || "").toLowerCase();
 
-            const statusClass = connected ? "connected" : "disconnected";
+            let statusText = connected ? t("integration_connected") : t("integration_disconnected");
+
+            if (statusRaw === "error") statusText = "Error";
+
+            if (!connected && statusRaw && statusRaw !== "disconnected" && statusRaw !== "error") {
+              statusText = statusRaw;
+            }
+
+            const statusClass = statusRaw === "error" ? "error" : connected ? "connected" : "disconnected";
 
             return `
 
@@ -9067,4 +9080,3 @@ async function loadTeam() {
   </body>
 
 </html>
-
