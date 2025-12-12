@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import os
+import time
 from datetime import UTC, datetime, timedelta
 from html import escape
 import logging
@@ -38,6 +39,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+_twilio_seen_events: dict[str, float] = {}
 
 
 class TwilioStreamEvent(BaseModel):
@@ -57,6 +59,20 @@ class TwilioStreamResponse(BaseModel):
     completed: bool = False
 
 
+def _check_twilio_replay(event_id: str, window_seconds: int) -> None:
+    """Basic replay protection for Twilio webhook event IDs."""
+    now = time.time()
+    expired = [eid for eid, ts in _twilio_seen_events.items() if now - ts > window_seconds]
+    for eid in expired:
+        _twilio_seen_events.pop(eid, None)
+    if event_id in _twilio_seen_events:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Duplicate Twilio webhook event",
+        )
+    _twilio_seen_events[event_id] = now
+
+
 async def _maybe_verify_twilio_signature(
     request: Request, form_params: Dict[str, str]
 ) -> None:
@@ -64,13 +80,20 @@ async def _maybe_verify_twilio_signature(
 
     If VERIFY_TWILIO_SIGNATURES=true and TWILIO_AUTH_TOKEN is set in the
     environment, this validates the X-Twilio-Signature header using the
-    standard Twilio algorithm (URL + sorted query/body params).
+    standard Twilio algorithm (URL + sorted query/body params). In production
+    (ENVIRONMENT=prod) signatures are required when provider is Twilio.
     """
     settings = get_settings()
     sms_cfg = settings.sms
-    if not getattr(sms_cfg, "verify_twilio_signatures", False):
-        return
-    if not sms_cfg.twilio_auth_token:
+    env = os.getenv("ENVIRONMENT", "dev").lower()
+    provider = (getattr(sms_cfg, "provider", "") or "").lower()
+    auth_token = getattr(sms_cfg, "twilio_auth_token", None)
+    replay_window = getattr(sms_cfg, "replay_protection_seconds", 300) or 300
+    require_sig = bool(
+        getattr(sms_cfg, "verify_twilio_signatures", False)
+        or (env == "prod" and provider == "twilio")
+    )
+    if not require_sig or not auth_token or provider == "stub":
         return
 
     twilio_sig = request.headers.get("X-Twilio-Signature")
@@ -113,6 +136,31 @@ async def _maybe_verify_twilio_signature(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid Twilio signature",
         )
+
+    # Optional timestamp guard to bound skew; when absent we skip the check.
+    ts_header = (
+        request.headers.get("X-Twilio-Request-Timestamp")
+        or request.headers.get("Twilio-Request-Timestamp")
+    )
+    if ts_header:
+        try:
+            ts_val = int(float(ts_header))
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid Twilio timestamp",
+            )
+        if abs(time.time() - ts_val) > replay_window:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Twilio request timestamp outside allowed window",
+            )
+
+    event_id = request.headers.get("X-Twilio-EventId") or request.headers.get(
+        "Twilio-Event-Id"
+    )
+    if event_id:
+        _check_twilio_replay(event_id, replay_window)
 
 
 def _get_business_name(business_id: str | None) -> str:

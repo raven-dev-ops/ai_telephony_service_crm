@@ -78,6 +78,7 @@ class SmsSettings(BaseModel):
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None
     verify_twilio_signatures: bool = False
+    replay_protection_seconds: int = 300
     enable_voicemail: bool = True
     # Optional TwiML <Say> language codes for voice prompts.
     # When unset, Twilio's default language for the chosen voice is used.
@@ -266,6 +267,9 @@ class AppSettings(BaseModel):
                 "VERIFY_TWILIO_SIGNATURES", "false"
             ).lower()
             == "true",
+            replay_protection_seconds=int(
+                os.getenv("TWILIO_REPLAY_PROTECTION_SECONDS", "300")
+            ),
             enable_voicemail=os.getenv("TWILIO_ENABLE_VOICEMAIL", "true").lower()
             == "true",
             twilio_say_language_default=os.getenv("TWILIO_SAY_LANGUAGE_DEFAULT"),
