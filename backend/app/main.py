@@ -31,6 +31,7 @@ from .routers import (
     calendar_integration,
     public_signup,
     reminders,
+    feedback,
     retention,
     planner,
     qbo_integration,
@@ -326,6 +327,7 @@ def create_app() -> FastAPI:
     app.include_router(
         qbo_integration.router, prefix="/v1/integrations/qbo", tags=["integrations"]
     )
+    app.include_router(feedback.router, prefix="/v1", tags=["feedback"])
     app.include_router(
         calendar_integration.router, prefix="/v1/calendar", tags=["calendar"]
     )

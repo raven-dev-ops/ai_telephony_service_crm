@@ -119,6 +119,7 @@
       </form>
       <div style="padding: 0 1rem 1rem 1rem;">
         <button id="new-conversation" type="button">New conversation</button>
+        <button id="widget-feedback" type="button" class="secondary">Send feedback</button>
       </div>
     </div>
 
@@ -158,6 +159,7 @@
       const phoneInput = document.getElementById("customer-phone-input");
       const emailInput = document.getElementById("customer-email-input");
       const statusEl = document.getElementById("chat-status");
+      const feedbackBtn = document.getElementById("widget-feedback");
 
       function authHeaders() {
         const headers = { "Content-Type": "application/json" };
@@ -327,6 +329,33 @@
         if (!text) return;
         inputEl.value = "";
         sendMessage(text);
+      });
+
+      feedbackBtn?.addEventListener("click", async () => {
+        const summary = prompt("Quick feedback (bug/idea):");
+        if (!summary) return;
+        const payload = {
+          category: "bug",
+          summary: summary,
+          steps: null,
+          expected: null,
+          actual: null,
+          call_sid: null,
+          contact: (emailInput?.value || "").trim() || null,
+          url: window.location.href,
+        };
+        try {
+          const res = await fetch(`${backendBase}/v1/feedback`, {
+            method: "POST",
+            headers: authHeaders(),
+            body: JSON.stringify(payload),
+          });
+          if (!res.ok) throw new Error(`Submit failed (${res.status})`);
+          alert("Thanks for the feedback!");
+        } catch (err) {
+          console.error(err);
+          alert(err?.message || "Unable to send feedback.");
+        }
       });
 
       // Start session on load

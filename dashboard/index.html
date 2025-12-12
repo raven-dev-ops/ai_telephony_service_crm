@@ -2314,8 +2314,71 @@
 
           overflow-x: auto;
 
-        }
+      }
 
+    }
+
+      /* Feedback modal */
+      #feedback-fab {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        padding: 0.75rem 1rem;
+        border-radius: 999px;
+        background: var(--text);
+        color: #fff;
+        border: none;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+        cursor: pointer;
+        z-index: 1200;
+      }
+      #feedback-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1300;
+      }
+      #feedback-modal {
+        background: #fff;
+        border-radius: 12px;
+        padding: 1.25rem;
+        width: min(520px, 90vw);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+      }
+      #feedback-modal h3 {
+        margin: 0 0 0.5rem 0;
+      }
+      #feedback-modal .muted {
+        margin-bottom: 0.75rem;
+        display: block;
+      }
+      #feedback-modal form {
+        display: grid;
+        gap: 0.75rem;
+      }
+      #feedback-modal textarea {
+        width: 100%;
+        min-height: 70px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.6rem;
+        font-family: inherit;
+      }
+      #feedback-modal input,
+      #feedback-modal select {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.6rem;
+        font-family: inherit;
+      }
+      #feedback-actions {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: flex-end;
       }
 
     </style>
@@ -3549,6 +3612,52 @@
     </div>
 
 
+
+    <div id="feedback-overlay">
+      <div id="feedback-modal" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
+        <h3 id="feedback-title">Send feedback</h3>
+        <span class="muted">Share a quick bug or idea. We include tenant context automatically.</span>
+        <form id="feedback-form">
+          <label>
+            <small>Category</small>
+            <select id="feedback-category">
+              <option value="bug">Bug</option>
+              <option value="idea">Idea</option>
+              <option value="support">Support</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <label>
+            <small>Summary *</small>
+            <input id="feedback-summary" type="text" placeholder="What happened?" required />
+          </label>
+          <label>
+            <small>Steps to reproduce</small>
+            <textarea id="feedback-steps" placeholder="Step 1, Step 2"></textarea>
+          </label>
+          <label>
+            <small>Expected</small>
+            <textarea id="feedback-expected" placeholder="What you expected to happen"></textarea>
+          </label>
+          <label>
+            <small>Actual</small>
+            <textarea id="feedback-actual" placeholder="What actually happened"></textarea>
+          </label>
+          <label>
+            <small>CallSid (if applicable)</small>
+            <input id="feedback-call-sid" type="text" placeholder="Twilio CallSid" />
+          </label>
+          <label>
+            <small>Contact (optional)</small>
+            <input id="feedback-contact" type="text" placeholder="Email or phone" />
+          </label>
+          <div id="feedback-actions">
+            <button type="button" class="secondary" id="feedback-close">Cancel</button>
+            <button type="submit">Send</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <script type="module">
 
@@ -9067,16 +9176,70 @@ async function loadTeam() {
 
         initOwnerAssistant();
 
-        loadOwnerOnboardingProfile();
+    loadOwnerOnboardingProfile();
 
-        loadSubscriptionStatus();
+    loadSubscriptionStatus();
 
-        refreshAllData();
+    refreshAllData();
 
-      });
+    // Feedback modal
+    const feedbackBtn = document.createElement("button");
+    feedbackBtn.id = "feedback-fab";
+    feedbackBtn.type = "button";
+    feedbackBtn.textContent = "Send Feedback";
+    document.body.appendChild(feedbackBtn);
 
-    </script>
+    const feedbackOverlay = document.getElementById("feedback-overlay");
+    const feedbackForm = document.getElementById("feedback-form");
+    const feedbackClose = document.getElementById("feedback-close");
 
-  </body>
+    function openFeedback() {
+      if (feedbackOverlay) feedbackOverlay.style.display = "flex";
+    }
+    function closeFeedback() {
+      if (feedbackOverlay) feedbackOverlay.style.display = "none";
+    }
+    feedbackBtn.addEventListener("click", openFeedback);
+    feedbackClose?.addEventListener("click", closeFeedback);
+    feedbackOverlay?.addEventListener("click", (e) => {
+      if (e.target === feedbackOverlay) closeFeedback();
+    });
+
+    feedbackForm?.addEventListener("submit", async (evt) => {
+      evt.preventDefault();
+      const payload = {
+        category: document.getElementById("feedback-category")?.value || "bug",
+        summary: (document.getElementById("feedback-summary")?.value || "").trim(),
+        steps: (document.getElementById("feedback-steps")?.value || "").trim() || null,
+        expected: (document.getElementById("feedback-expected")?.value || "").trim() || null,
+        actual: (document.getElementById("feedback-actual")?.value || "").trim() || null,
+        call_sid: (document.getElementById("feedback-call-sid")?.value || "").trim() || null,
+        contact: (document.getElementById("feedback-contact")?.value || "").trim() || null,
+        url: window.location.href,
+      };
+      if (!payload.summary) {
+        alert("Please add a short summary.");
+        return;
+      }
+      try {
+        const res = await authorizedFetch("/v1/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error(`Submit failed (${res.status})`);
+        closeFeedback();
+        alert("Thanks for the feedback!");
+      } catch (err) {
+        console.error(err);
+        alert(err?.message || "Unable to submit feedback right now.");
+      }
+    });
+
+  });
+
+</script>
+
+</body>
 
 </html>
