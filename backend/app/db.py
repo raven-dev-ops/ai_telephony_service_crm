@@ -443,42 +443,42 @@ def init_db() -> None:
                         "ALTER TABLE conversations ADD COLUMN intent_confidence INTEGER NULL"
                     )
                 conn.commit()
-            # Create user and business_users tables if missing (SQLite only).
-            existing_tables = {
-                str(row[0])
-                for row in conn.exec_driver_sql(
-                    "SELECT name FROM sqlite_master WHERE type='table'"
-                )
-            }
-            if "users" not in existing_tables:
-                conn.exec_driver_sql(
-                    """
-                    CREATE TABLE users (
-                        id VARCHAR(255) PRIMARY KEY,
-                        email VARCHAR(255) UNIQUE NOT NULL,
-                        password_hash VARCHAR(255) NULL,
-                        name VARCHAR(255) NULL,
-                        active_business_id VARCHAR(255) NULL,
-                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        failed_login_attempts INTEGER NOT NULL DEFAULT 0,
-                        lockout_until TIMESTAMP NULL,
-                        reset_token_hash VARCHAR(255) NULL,
-                        reset_token_expires_at TIMESTAMP NULL
+                # Create user and business_users tables if missing (SQLite only).
+                existing_tables = {
+                    str(row[0])
+                    for row in conn.exec_driver_sql(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
                     )
-                    """
-                )
-            if "business_users" not in existing_tables:
-                conn.exec_driver_sql(
-                    """
-                    CREATE TABLE business_users (
-                        id VARCHAR(255) PRIMARY KEY,
-                        business_id VARCHAR(255) NOT NULL,
-                        user_id VARCHAR(255) NOT NULL,
-                        role VARCHAR(64) NOT NULL DEFAULT 'owner'
+                }
+                if "users" not in existing_tables:
+                    conn.exec_driver_sql(
+                        """
+                        CREATE TABLE users (
+                            id VARCHAR(255) PRIMARY KEY,
+                            email VARCHAR(255) UNIQUE NOT NULL,
+                            password_hash VARCHAR(255) NULL,
+                            name VARCHAR(255) NULL,
+                            active_business_id VARCHAR(255) NULL,
+                            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                            failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+                            lockout_until TIMESTAMP NULL,
+                            reset_token_hash VARCHAR(255) NULL,
+                            reset_token_expires_at TIMESTAMP NULL
+                        )
+                        """
                     )
-                    """
-                )
-            conn.commit()
+                if "business_users" not in existing_tables:
+                    conn.exec_driver_sql(
+                        """
+                        CREATE TABLE business_users (
+                            id VARCHAR(255) PRIMARY KEY,
+                            business_id VARCHAR(255) NOT NULL,
+                            user_id VARCHAR(255) NOT NULL,
+                            role VARCHAR(64) NOT NULL DEFAULT 'owner'
+                        )
+                        """
+                    )
+                conn.commit()
     except Exception:
         # Schema drift should not prevent the app from starting; any issues
         # will surface when the new fields are actually used.
