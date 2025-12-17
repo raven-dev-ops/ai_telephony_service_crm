@@ -35,7 +35,9 @@ jobs:
       - name: Run pip-audit (fail on vulnerabilities)
         working-directory: backend
         run: |
-          pip-audit --progress-spinner=off --strict --local --skip-editable
+          python -m pip freeze --all > requirements-freeze.txt
+          grep -v -E '^(ai-telephony-backend==|ai-telephony-backend @ |-e )' requirements-freeze.txt > requirements-audit.txt
+          pip-audit --progress-spinner=off --strict -r requirements-audit.txt
 
   sbom:
     name: Generate SBOM
