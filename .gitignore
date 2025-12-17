@@ -9,6 +9,13 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# Node / frontend artifacts
+node_modules/
+dist/
+frontend/node_modules/
+frontend/dist/
+frontend/.env.*
+
 # IDE/editor files
 .vscode/
 .idea/
@@ -28,3 +35,6 @@ stripepub.txt
 gcloud-armor-*.yaml
 gcloud-armor-*.txt
 ai_telephony_service_crm.wiki.local/
+
+# Local issue backlog scratchpad
+github-issues-backlog.md
