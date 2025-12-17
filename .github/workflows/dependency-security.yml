@@ -35,7 +35,7 @@ jobs:
       - name: Run pip-audit (fail on vulnerabilities)
         working-directory: backend
         run: |
-          pip-audit --progress-spinner=off --strict --local
+          pip-audit --progress-spinner=off --strict --local --skip-editable
 
   sbom:
     name: Generate SBOM

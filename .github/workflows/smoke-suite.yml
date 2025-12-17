@@ -53,18 +53,34 @@ jobs:
           retention-days: 3
 
   smoke-staging:
-    if: ${{ secrets.SMOKE_BASE_URL != '' && secrets.SMOKE_API_KEY != '' && secrets.SMOKE_OWNER_TOKEN != '' }}
     runs-on: ubuntu-latest
+    env:
+      SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL }}
+      SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
+      SMOKE_OWNER_TOKEN: ${{ secrets.SMOKE_OWNER_TOKEN }}
     steps:
+      - name: Decide whether to run staging smoke
+        id: gate
+        run: |
+          if [ -n "${SMOKE_BASE_URL}" ] && [ -n "${SMOKE_API_KEY}" ] && [ -n "${SMOKE_OWNER_TOKEN}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "SMOKE_* secrets not set; skipping staging smoke."
+          fi
+
       - name: Check out repository
+        if: steps.gate.outputs.enabled == 'true'
         uses: actions/checkout@v4
 
       - name: Set up Python
+        if: steps.gate.outputs.enabled == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Cache pip
+        if: steps.gate.outputs.enabled == 'true'
         id: cache-pip
         uses: actions/cache@v4
         with:
@@ -75,22 +91,20 @@ jobs:
             pip-smoke-${{ runner.os }}-3.11-
 
       - name: Install backend dependencies
+        if: steps.gate.outputs.enabled == 'true'
         working-directory: backend
         run: |
           python -m pip install --upgrade pip
           pip install -e .[dev]
 
       - name: Run smoke suite against staging (skips if not implemented)
+        if: steps.gate.outputs.enabled == 'true'
         working-directory: backend
-        env:
-          SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL }}
-          SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
-          SMOKE_OWNER_TOKEN: ${{ secrets.SMOKE_OWNER_TOKEN }}
         run: |
           python smoke_suite.py --output smoke-report-staging.json
 
       - name: Upload staging smoke report
-        if: always()
+        if: always() && steps.gate.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: smoke-report-staging
