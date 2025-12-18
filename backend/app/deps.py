@@ -30,7 +30,7 @@ async def get_business_id(
     x_api_key: str | None = Header(default=None, alias="X-API-Key"),
     x_widget_token: str | None = Header(default=None, alias="X-Widget-Token"),
     authorization: str | None = Header(default=None, alias="Authorization"),
-    request: Request = None,
+    request: Request = cast(Request, None),
 ) -> str:
     """Resolve the current business/tenant ID from the request.
 
@@ -317,7 +317,7 @@ async def require_subscription_active(
 
 
 async def require_admin_auth(
-    request: Request = None,
+    request: Request = cast(Request, None),
     x_admin_api_key: str | None = Header(default=None, alias="X-Admin-API-Key"),
 ) -> None:
     """Optional admin authentication for /v1/admin routes.
@@ -351,7 +351,7 @@ async def require_admin_auth(
 
 
 async def require_owner_dashboard_auth(
-    request: Request = None,
+    request: Request = cast(Request, None),
     x_owner_token: str | None = Header(default=None, alias="X-Owner-Token"),
 ) -> None:
     """Optional owner/dashboard authentication for CRM & owner routes.
@@ -404,7 +404,7 @@ def require_dashboard_role(
     allowed_set = {r.lower() for r in allowed_roles}
 
     async def _dep(
-        request: Request = None,
+        request: Request = cast(Request, None),
         x_owner_token: str | None = Header(default=None, alias="X-Owner-Token"),
         x_admin_api_key: str | None = Header(default=None, alias="X-Admin-API-Key"),
         x_user_id: str | None = Header(default=None, alias="X-User-ID"),
