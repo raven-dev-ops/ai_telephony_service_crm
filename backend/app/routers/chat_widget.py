@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from ..config import get_settings
 from ..deps import ensure_business_active
 from ..repositories import conversations_repo, customers_repo
 from ..services.conversation import ConversationManager
@@ -38,6 +39,7 @@ class ChatMessageResponse(BaseModel):
 class WidgetBusinessResponse(BaseModel):
     id: str
     name: str
+    language_code: str
 
 
 @router.get("/business", response_model=WidgetBusinessResponse)
@@ -45,7 +47,10 @@ async def widget_business(
     business_id: str = Depends(ensure_business_active),
 ) -> WidgetBusinessResponse:
     """Return basic business info for the widget / web chat context."""
+    settings = get_settings()
+    default_language = getattr(settings, "default_language_code", "en")
     name = "Default Business"
+    language_code = default_language
     if SQLALCHEMY_AVAILABLE and SessionLocal is not None:
         session_db = SessionLocal()
         try:
@@ -54,7 +59,11 @@ async def widget_business(
             session_db.close()
         if row is not None and getattr(row, "name", None):
             name = row.name
-    return WidgetBusinessResponse(id=business_id, name=name)
+        if row is not None and getattr(row, "language_code", None):
+            language_code = row.language_code
+    return WidgetBusinessResponse(
+        id=business_id, name=name, language_code=language_code
+    )
 
 
 @router.post("/start", response_model=ChatStartResponse)

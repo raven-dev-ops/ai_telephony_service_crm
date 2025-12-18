@@ -39,6 +39,8 @@ def test_widget_business_returns_default_business_id() -> None:
     assert body["id"] == "default_business"
     assert isinstance(body["name"], str)
     assert body["name"]
+    assert isinstance(body["language_code"], str)
+    assert body["language_code"]
 
 
 def test_widget_business_uses_db_name_when_available() -> None:
@@ -57,6 +59,7 @@ def test_widget_business_uses_db_name_when_available() -> None:
             session.add(row)
         else:
             row.name = "Widget Business Test"
+        row.language_code = "es"
         session.commit()
     finally:
         session.close()
@@ -66,3 +69,4 @@ def test_widget_business_uses_db_name_when_available() -> None:
     body = resp.json()
     assert body["id"] == biz_id
     assert body["name"] == "Widget Business Test"
+    assert body["language_code"] == "es"
