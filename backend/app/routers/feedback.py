@@ -106,7 +106,7 @@ def _clean_url(value: str | None) -> str | None:
         raw = urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
     except Exception:
         # If parsing fails, keep best-effort raw string.
-        pass
+        return _clean_text(raw, max_len=1024)
     return _clean_text(raw, max_len=1024)
 
 
