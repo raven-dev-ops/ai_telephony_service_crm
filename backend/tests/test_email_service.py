@@ -199,7 +199,9 @@ def test_gmail_refreshes_expired_tokens_and_sends(monkeypatch):
 
         async def post(self, url, headers=None, json=None, data=None):
             # First call is token refresh, second is Gmail send.
-            if "oauth2.googleapis.com" in url:
+            from urllib.parse import urlparse
+
+            if urlparse(url).hostname == "oauth2.googleapis.com":
                 return DummyResponse(
                     payload={"access_token": "new_access", "expires_in": 3600}
                 )

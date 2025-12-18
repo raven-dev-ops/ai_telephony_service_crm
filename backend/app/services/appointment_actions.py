@@ -105,11 +105,7 @@ async def cancel_appointment(
                 business_id=business_id,
             )
         except Exception:
-            logger.warning(
-                "calendar_delete_event_failed",
-                exc_info=True,
-                extra={"appointment_id": appointment_id, "business_id": business_id},
-            )
+            logger.warning("calendar_delete_event_failed", exc_info=True)
 
     job_stage = getattr(appt, "job_stage", None) or "Cancelled"
     appointments_repo.update(
