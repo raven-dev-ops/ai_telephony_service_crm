@@ -731,6 +731,11 @@
 
       }
 
+      :where(a, button, input, textarea, select, [role="button"]):focus-visible {
+        outline: 2px solid #0ea5e9;
+        outline-offset: 2px;
+      }
+
       
 
       .card-header {
@@ -809,6 +814,23 @@
 
         border-bottom: 1px solid #f7fafc;
 
+      }
+
+      .metric-row-interactive {
+        width: 100%;
+        text-align: left;
+        cursor: pointer;
+        background: transparent;
+        appearance: none;
+        -webkit-appearance: none;
+        font: inherit;
+        color: inherit;
+        border: none;
+        border-bottom: 1px solid #f7fafc;
+      }
+
+      .metric-row-interactive:hover {
+        background: #f8fafc;
       }
 
       
@@ -2332,6 +2354,10 @@
         cursor: pointer;
         z-index: 1200;
       }
+      #feedback-fab:focus-visible {
+        outline: 2px solid #0ea5e9;
+        outline-offset: 3px;
+      }
       #feedback-overlay {
         position: fixed;
         inset: 0;
@@ -3555,7 +3581,14 @@
 
     <div id="owner-assistant-root" class="assistant-root">
 
-      <button id="owner-assistant-toggle" type="button" class="assistant-toggle">
+      <button
+        id="owner-assistant-toggle"
+        type="button"
+        class="assistant-toggle"
+        aria-haspopup="dialog"
+        aria-controls="owner-assistant-panel"
+        aria-expanded="false"
+      >
 
         <span class="assistant-toggle-icon">
 
@@ -3571,13 +3604,20 @@
 
       </button>
 
-      <div id="owner-assistant-panel" class="assistant-panel" aria-hidden="true">
+      <div
+        id="owner-assistant-panel"
+        class="assistant-panel"
+        role="dialog"
+        aria-modal="false"
+        aria-labelledby="owner-assistant-title"
+        aria-hidden="true"
+      >
 
         <div class="assistant-header">
 
           <div>
 
-            <div class="assistant-title" data-i18n="assistant_title">AI Owner Assistant</div>
+            <div id="owner-assistant-title" class="assistant-title" data-i18n="assistant_title">AI Owner Assistant</div>
 
             <div class="assistant-subtitle" data-i18n="assistant_subtitle">Ask about metrics, data, policies, or support.</div>
 
@@ -3629,7 +3669,7 @@
 
 
 
-    <div id="feedback-overlay">
+    <div id="feedback-overlay" aria-hidden="true">
       <div id="feedback-modal" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
         <h3 id="feedback-title">Send feedback</h3>
         <span class="muted">Share a quick bug or idea. We include tenant context automatically.</span>
@@ -7165,6 +7205,8 @@
 
 
 
+        let calendarModalReturnFocus = null;
+
         function openCalendarModal(dateStr) {
 
           const modal = document.getElementById("calendar-report-modal");
@@ -7336,6 +7378,8 @@
           modal.style.display = "flex";
 
           modal.setAttribute("aria-hidden", "false");
+          calendarModalReturnFocus = document.activeElement;
+          document.getElementById("calendar-modal-close")?.focus();
 
         }
 
@@ -7352,6 +7396,10 @@
           modal.setAttribute("aria-hidden", "true");
 
           delete modal.dataset.date;
+          if (calendarModalReturnFocus && calendarModalReturnFocus.focus) {
+            calendarModalReturnFocus.focus();
+          }
+          calendarModalReturnFocus = null;
 
         }
 
@@ -7385,6 +7433,33 @@
 
               }
 
+            });
+
+            modal.addEventListener("keydown", (evt) => {
+              if (evt.key === "Escape") {
+                evt.preventDefault();
+                closeCalendarModal();
+                return;
+              }
+              if (evt.key !== "Tab") {
+                return;
+              }
+              const focusRoot = modal.querySelector(".modal") || modal;
+              const focusable = Array.from(
+                focusRoot.querySelectorAll(
+                  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+                ),
+              ).filter((el) => el.offsetParent !== null);
+              if (!focusable.length) return;
+              const first = focusable[0];
+              const last = focusable[focusable.length - 1];
+              if (evt.shiftKey && document.activeElement === first) {
+                evt.preventDefault();
+                last.focus();
+              } else if (!evt.shiftKey && document.activeElement === last) {
+                evt.preventDefault();
+                first.focus();
+              }
             });
 
           }
@@ -7475,7 +7550,7 @@
 
         listEl.innerHTML = list.map(conv => `
 
-          <div class="metric-row" data-conversation-id="${escapeHtml(conv.id)}">
+          <button type="button" class="metric-row metric-row-interactive" data-conversation-id="${escapeHtml(conv.id)}">
 
             <div>
 
@@ -7495,7 +7570,7 @@
 
             </div>
 
-          </div>
+          </button>
 
         `).join("");
 
@@ -7873,11 +7948,14 @@
           panel.style.display = open ? "flex" : "none";
 
           panel.setAttribute("aria-hidden", open ? "false" : "true");
+          toggle.setAttribute("aria-expanded", open ? "true" : "false");
 
           if (open) {
 
             input.focus();
 
+          } else {
+            toggle.focus();
           }
 
         }
@@ -7910,6 +7988,13 @@
 
           setOpen(false);
 
+        });
+
+        panel.addEventListener("keydown", (evt) => {
+          if (evt.key === "Escape") {
+            evt.preventDefault();
+            setOpen(false);
+          }
         });
 
 
@@ -9279,22 +9364,62 @@ async function loadTeam() {
     feedbackBtn.id = "feedback-fab";
     feedbackBtn.type = "button";
     feedbackBtn.textContent = "Send Feedback";
+    feedbackBtn.setAttribute("aria-haspopup", "dialog");
+    feedbackBtn.setAttribute("aria-controls", "feedback-modal");
+    feedbackBtn.setAttribute("aria-expanded", "false");
     document.body.appendChild(feedbackBtn);
 
     const feedbackOverlay = document.getElementById("feedback-overlay");
     const feedbackForm = document.getElementById("feedback-form");
     const feedbackClose = document.getElementById("feedback-close");
+    let feedbackReturnFocus = null;
 
     function openFeedback() {
-      if (feedbackOverlay) feedbackOverlay.style.display = "flex";
+      if (!feedbackOverlay) return;
+      feedbackReturnFocus = document.activeElement;
+      feedbackOverlay.style.display = "flex";
+      feedbackOverlay.setAttribute("aria-hidden", "false");
+      feedbackBtn.setAttribute("aria-expanded", "true");
+      (document.getElementById("feedback-category") || document.getElementById("feedback-summary"))?.focus();
     }
     function closeFeedback() {
-      if (feedbackOverlay) feedbackOverlay.style.display = "none";
+      if (!feedbackOverlay) return;
+      feedbackOverlay.style.display = "none";
+      feedbackOverlay.setAttribute("aria-hidden", "true");
+      feedbackBtn.setAttribute("aria-expanded", "false");
+      const focusTarget = feedbackReturnFocus && feedbackReturnFocus.focus ? feedbackReturnFocus : feedbackBtn;
+      focusTarget?.focus();
+      feedbackReturnFocus = null;
     }
     feedbackBtn.addEventListener("click", openFeedback);
     feedbackClose?.addEventListener("click", closeFeedback);
     feedbackOverlay?.addEventListener("click", (e) => {
       if (e.target === feedbackOverlay) closeFeedback();
+    });
+    feedbackOverlay?.addEventListener("keydown", (evt) => {
+      if (evt.key === "Escape") {
+        evt.preventDefault();
+        closeFeedback();
+        return;
+      }
+      if (evt.key !== "Tab") return;
+      const modal = document.getElementById("feedback-modal");
+      if (!modal) return;
+      const focusable = Array.from(
+        modal.querySelectorAll(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => el.offsetParent !== null);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (evt.shiftKey && document.activeElement === first) {
+        evt.preventDefault();
+        last.focus();
+      } else if (!evt.shiftKey && document.activeElement === last) {
+        evt.preventDefault();
+        first.focus();
+      }
     });
 
     feedbackForm?.addEventListener("submit", async (evt) => {

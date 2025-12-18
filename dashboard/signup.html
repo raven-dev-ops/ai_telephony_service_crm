@@ -80,6 +80,10 @@
         border-color: #0ea5e9;
         box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.2);
       }
+      :is(a, button, input, select, textarea):focus-visible {
+        outline: 2px solid #0ea5e9;
+        outline-offset: 2px;
+      }
       textarea { min-height: 80px; resize: vertical; }
       .muted { font-size: 0.8rem; color: #94a3b8; }
       .status {

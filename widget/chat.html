@@ -24,10 +24,31 @@
       header {
         padding: 0.75rem 1rem;
         border-bottom: 1px solid #eee;
+        position: relative;
       }
       header h1 {
         margin: 0;
         font-size: 1rem;
+      }
+      :is(button, input, textarea, select, a):focus-visible {
+        outline: 2px solid #0ea5e9;
+        outline-offset: 2px;
+      }
+      #widget-close {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        border: none;
+        background: transparent;
+        color: #111827;
+        border-radius: 6px;
+        padding: 0.25rem 0.35rem;
+        font-size: 1.25rem;
+        line-height: 1;
+        cursor: pointer;
+      }
+      #widget-close:hover {
+        background: rgba(15, 23, 42, 0.08);
       }
       main {
         flex: 1;
@@ -56,7 +77,10 @@
         border-top: 1px solid #eee;
         gap: 0.5rem;
       }
-      input[type="text"] {
+      input[type="text"],
+      input[type="tel"],
+      input[type="email"],
+      input[type="password"] {
         flex: 1;
         border-radius: 4px;
         border: 1px solid #ccc;
@@ -86,6 +110,16 @@
   <body>
     <div class="chat-container">
       <header>
+        <button
+          id="widget-close"
+          type="button"
+          aria-label="Close chat"
+          title="Close chat"
+          data-i18n="widget_close_aria"
+          data-i18n-attr="aria-label,title"
+        >
+          &times;
+        </button>
         <h1 id="widget-title" data-i18n="widget_title_default">AI Assistant Chat</h1>
         <small id="widget-subtitle" data-i18n="widget_subtitle_default">For plumbing help from this business.</small><br />
         <small data-i18n="widget_emergency_notice">If this is a life-threatening emergency, please call 911 or your local emergency number.</small>
@@ -94,10 +128,16 @@
             <small data-i18n="api_key_label">API Key (X-API-Key): </small>
             <input id="api-key-input" type="password" placeholder="Optional tenant key" data-i18n="api_key_placeholder" data-i18n-attr="placeholder" />
           </label>
-          <small id="api-key-status"></small>
+          <small id="api-key-status" role="status" aria-live="polite"></small>
         </div>
       </header>
-      <main id="chat-log" role="log" aria-live="polite" aria-atomic="false"></main>
+      <main
+        id="chat-log"
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions"
+        aria-atomic="false"
+      ></main>
       <div style="padding: 0 1rem 0.5rem 1rem;">
         <div>
           <label>
@@ -111,7 +151,7 @@
             <input id="customer-email-input" type="email" placeholder="you@example.com" data-i18n="customer_email_placeholder" data-i18n-attr="placeholder" />
           </label>
         </div>
-        <small id="chat-status" aria-live="polite"></small>
+        <small id="chat-status" role="status" aria-live="polite"></small>
       </div>
       <form id="chat-form">
         <input id="chat-input" type="text" placeholder="Type your message..." autocomplete="off" aria-label="Type your message" data-i18n="chat_input_placeholder" data-i18n-attr="placeholder,aria-label" />
@@ -178,6 +218,32 @@
       const emailInput = document.getElementById("customer-email-input");
       const statusEl = document.getElementById("chat-status");
       const feedbackBtn = document.getElementById("widget-feedback");
+      const closeBtn = document.getElementById("widget-close");
+      const newConversationBtn = document.getElementById("new-conversation");
+      const isEmbedded = window.parent && window.parent !== window;
+
+      function requestClose() {
+        if (!isEmbedded) return;
+        try {
+          window.parent.postMessage(
+            { source: "bristol-chat-widget", action: "close" },
+            "*",
+          );
+        } catch (e) {
+          // Ignore postMessage errors.
+        }
+      }
+
+      if (closeBtn) {
+        closeBtn.style.display = isEmbedded ? "inline-flex" : "none";
+        closeBtn.addEventListener("click", requestClose);
+      }
+
+      document.addEventListener("keydown", (evt) => {
+        if (evt.key === "Escape") {
+          requestClose();
+        }
+      });
 
       function authHeaders() {
         const headers = { "Content-Type": "application/json" };
@@ -355,6 +421,13 @@
         sendMessage(text);
       });
 
+      newConversationBtn?.addEventListener("click", () => {
+        conversationId = null;
+        if (logEl) logEl.innerHTML = "";
+        startConversation();
+        inputEl?.focus();
+      });
+
       feedbackBtn?.addEventListener("click", async () => {
         const summary = prompt(t("feedback_prompt"));
         if (!summary) return;
@@ -385,6 +458,7 @@
       // Start session on load
       loadWidgetBusiness();
       startConversation();
+      inputEl?.focus();
     </script>
   </body>
   </html>

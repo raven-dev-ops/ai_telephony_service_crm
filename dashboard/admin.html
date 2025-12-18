@@ -128,6 +128,11 @@
         cursor: not-allowed;
         transform: none;
       }
+
+      :where(a, button, input, textarea, select, [tabindex]:not([tabindex="-1"])):focus-visible {
+        outline: 3px solid #0ea5e9;
+        outline-offset: 2px;
+      }
       
       button.secondary {
         background: #64748b;
@@ -1540,6 +1545,8 @@
         return `${days}d ago`;
       }
 
+      let usageDetailReturnFocus = null;
+
       function renderUsageDetail(tenantId) {
         const overlay = document.getElementById("usage-detail-overlay");
         const title = document.getElementById("usage-detail-title");
@@ -1605,8 +1612,10 @@
             </div>
           </div>
         `;
+        usageDetailReturnFocus = document.activeElement;
         overlay.style.display = "flex";
         overlay.setAttribute("aria-hidden", "false");
+        document.getElementById("usage-detail-close")?.focus();
       }
 
       function closeUsageDetail() {
@@ -1615,6 +1624,12 @@
           overlay.style.display = "none";
           overlay.setAttribute("aria-hidden", "true");
         }
+        const focusTarget =
+          usageDetailReturnFocus && usageDetailReturnFocus.focus
+            ? usageDetailReturnFocus
+            : document.getElementById("test-admin-access");
+        focusTarget?.focus();
+        usageDetailReturnFocus = null;
       }
 
       function renderTenants(source) {
@@ -1801,22 +1816,48 @@
         `;
 
         el.querySelectorAll("th.sortable").forEach((th) => {
+          const key = th.getAttribute("data-sort") || "appointments_last_30_days";
+          const label = (th.textContent || "").trim();
           th.style.cursor = "pointer";
+          th.tabIndex = 0;
+          th.setAttribute(
+            "aria-sort",
+            usageSort.key === key
+              ? usageSort.dir === "asc"
+                ? "ascending"
+                : "descending"
+              : "none"
+          );
+          if (label) {
+            th.setAttribute("aria-label", `Sort by ${label}`);
+          }
           th.addEventListener("click", () => {
-            const key = th.getAttribute("data-sort") || "appointments_last_30_days";
             if (usageSort.key === key) {
               usageSort.dir = usageSort.dir === "asc" ? "desc" : "asc";
             } else {
               usageSort = { key, dir: "desc" };
             }
-           renderUsageTable();
-         });
-       });
+            renderUsageTable();
+          });
+          th.addEventListener("keydown", (evt) => {
+            if (evt.key === "Enter" || evt.key === " ") {
+              evt.preventDefault();
+              th.click();
+            }
+          });
+        });
         el.querySelectorAll(".usage-row").forEach((row) => {
           row.style.cursor = "pointer";
+          row.tabIndex = 0;
           row.addEventListener("click", () => {
             const id = row.getAttribute("data-tenant-id");
             if (id) renderUsageDetail(id);
+          });
+          row.addEventListener("keydown", (evt) => {
+            if (evt.key === "Enter" || evt.key === " ") {
+              evt.preventDefault();
+              row.click();
+            }
           });
         });
       }
@@ -1833,6 +1874,32 @@
       document.getElementById("usage-detail-overlay")?.addEventListener("click", (e) => {
         if (e.target && e.target.id === "usage-detail-overlay") {
           closeUsageDetail();
+        }
+      });
+      document.getElementById("usage-detail-overlay")?.addEventListener("keydown", (evt) => {
+        const overlay = document.getElementById("usage-detail-overlay");
+        if (!overlay || overlay.getAttribute("aria-hidden") !== "false") return;
+        if (evt.key === "Escape") {
+          evt.preventDefault();
+          closeUsageDetail();
+          return;
+        }
+        if (evt.key !== "Tab") return;
+        const drawer = overlay.querySelector(".drawer") || overlay;
+        const focusable = Array.from(
+          drawer.querySelectorAll(
+            'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+        ).filter((el) => el.offsetParent !== null);
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (evt.shiftKey && document.activeElement === first) {
+          evt.preventDefault();
+          last.focus();
+        } else if (!evt.shiftKey && document.activeElement === last) {
+          evt.preventDefault();
+          first.focus();
         }
       });
 

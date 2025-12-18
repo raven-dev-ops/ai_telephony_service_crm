@@ -167,6 +167,10 @@
         border-color: #6366f1;
         box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.3);
       }
+      :is(a, button, input, select, textarea):focus-visible {
+        outline: 2px solid #0ea5e9;
+        outline-offset: 2px;
+      }
       textarea { min-height: 80px; resize: vertical; }
       .button-row {
         margin-top: 1.5rem;
@@ -703,7 +707,7 @@
         const label = $("onboarding-business-label");
         if (label) {
           const tier = onboardingProfile.service_tier || "unselected";
-          label.textContent = `${onboardingProfile.business_name} (${onboardingProfile.business_id}) — tier: ${tier}`;
+          label.textContent = `${onboardingProfile.business_name} (${onboardingProfile.business_id}) â€” tier: ${tier}`;
         }
         const ownerNameEl = $("owner-name");
         const ownerEmailEl = $("owner-email");

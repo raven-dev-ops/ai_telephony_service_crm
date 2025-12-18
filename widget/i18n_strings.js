@@ -6,6 +6,7 @@ export const i18nStrings = {
     widget_subtitle_business: "For plumbing help from {name}.",
     widget_emergency_notice:
       "If this is a life-threatening emergency, please call 911 or your local emergency number.",
+    widget_close_aria: "Close chat",
 
     api_key_label: "API Key (X-API-Key): ",
     api_key_placeholder: "Optional tenant key",
@@ -49,6 +50,7 @@ export const i18nStrings = {
     widget_subtitle_business: "Ayuda de plomería de {name}.",
     widget_emergency_notice:
       "Si se trata de una emergencia que pone en riesgo la vida, llama al 911 o a tu número de emergencias local.",
+    widget_close_aria: "Cerrar chat",
 
     api_key_label: "API Key (X-API-Key): ",
     api_key_placeholder: "Clave del inquilino (opcional)",
