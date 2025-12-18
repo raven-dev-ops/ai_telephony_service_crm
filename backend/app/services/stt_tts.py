@@ -219,6 +219,46 @@ class GoogleCloudSpeechProvider(SpeechProvider):
         except Exception:
             return None
 
+    def _detect_audio_encoding(self, audio_bytes: bytes) -> tuple[str, int | None]:
+        """Best-effort audio encoding detection for Google STT.
+
+        We primarily expect WAV/LINEAR16 from callers, but the validation harness
+        and some clients may provide MP3/FLAC/OGG audio.
+        """
+        wav_rate = self._parse_wav_sample_rate(audio_bytes)
+        if wav_rate:
+            return ("LINEAR16", wav_rate)
+
+        if (
+            len(audio_bytes) >= 12
+            and audio_bytes[0:4] == b"RIFF"
+            and audio_bytes[8:12] == b"WAVE"
+        ):
+            # WAV header present but sample rate couldn't be parsed; fall back.
+            return ("LINEAR16", 8000)
+
+        if len(audio_bytes) >= 4 and audio_bytes[0:4] == b"fLaC":
+            return ("FLAC", None)
+
+        is_mp3 = False
+        if len(audio_bytes) >= 3 and audio_bytes[0:3] == b"ID3":
+            is_mp3 = True
+        elif (
+            len(audio_bytes) >= 2
+            and audio_bytes[0] == 0xFF
+            and (audio_bytes[1] & 0xE0) == 0xE0
+        ):
+            # Frame sync bits set (common for MP3 without ID3 tags).
+            is_mp3 = True
+        if is_mp3:
+            return ("MP3", None)
+
+        if len(audio_bytes) >= 4 and audio_bytes[0:4] == b"OggS":
+            # Best-effort: treat OGG as Opus; sample rate is encoded in the stream.
+            return ("OGG_OPUS", None)
+
+        return ("LINEAR16", 8000)
+
     async def transcribe(self, audio: str | None) -> str:
         if not audio or audio.startswith("audio://"):
             return ""
@@ -229,15 +269,17 @@ class GoogleCloudSpeechProvider(SpeechProvider):
 
         token = await self._access_token()
         url = "https://speech.googleapis.com/v1/speech:recognize"
-        sample_rate = self._parse_wav_sample_rate(audio_bytes) or 8000
+        encoding, sample_rate = self._detect_audio_encoding(audio_bytes)
+        config: dict[str, Any] = {
+            "encoding": encoding,
+            "languageCode": self._stt_language_code(),
+            "enableAutomaticPunctuation": True,
+            "model": (self._settings.gcp_stt_model or "default"),
+        }
+        if sample_rate:
+            config["sampleRateHertz"] = int(sample_rate)
         payload = {
-            "config": {
-                "encoding": "LINEAR16",
-                "sampleRateHertz": sample_rate,
-                "languageCode": self._stt_language_code(),
-                "enableAutomaticPunctuation": True,
-                "model": (self._settings.gcp_stt_model or "default"),
-            },
+            "config": config,
             "audio": {"content": audio},
         }
         headers = {

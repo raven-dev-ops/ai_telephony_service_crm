@@ -39,6 +39,10 @@ Optional:
 - `GCP_TTS_AUDIO_ENCODING` (default `MP3`)
 - `GCP_SPEECH_TIMEOUT_SECONDS` (default `12`)
 
+Notes:
+- The Google STT path supports common encodings (WAV/LINEAR16, MP3, FLAC, OGG/Opus) via best-effort detection.
+- For **samples mode**, use `.wav` files for predictable results.
+
 ## Running the harness
 
 The harness runs in-process (no server required):

@@ -109,6 +109,51 @@ async def test_gcp_transcribe_parses_results_and_uses_sample_rate(
 
 
 @pytest.mark.anyio
+async def test_gcp_transcribe_detects_mp3_and_omits_sample_rate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = GoogleCloudSpeechProvider(SpeechSettings(provider="gcp"))
+    provider._credentials = FakeCreds(
+        token="existing-token",
+        expiry=datetime.now(UTC) + timedelta(hours=1),
+    )
+
+    captured: dict = {}
+
+    class FakeResp:
+        def raise_for_status(self) -> None:  # pragma: no cover - trivial
+            return None
+
+        def json(self) -> dict:
+            return {"results": [{"alternatives": [{"transcript": "ok"}]}]}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        async def __aenter__(self) -> "FakeClient":
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def post(self, url: str, headers=None, json=None):
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["json"] = json
+            return FakeResp()
+
+    monkeypatch.setattr("app.services.stt_tts.httpx.AsyncClient", FakeClient)
+
+    # Minimal bytes with an ID3 header are sufficient for encoding detection.
+    audio_b64 = base64.b64encode(b"ID3" + b"\x00" * 64).decode("ascii")
+    text = await provider.transcribe(audio_b64)
+    assert text == "ok"
+    assert captured["json"]["config"]["encoding"] == "MP3"
+    assert "sampleRateHertz" not in captured["json"]["config"]
+
+
+@pytest.mark.anyio
 async def test_gcp_synthesize_returns_audio_content(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

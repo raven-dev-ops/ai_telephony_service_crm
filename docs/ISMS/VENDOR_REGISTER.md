@@ -18,3 +18,7 @@ Management
 - Store signed DPAs in the shared secure drive; link to GitHub issue for traceability.
 - For each vendor, record last penetration test date (if provided) and SOC2/ISO certificates when available.
 - Set a quarterly reminder to refresh evidence links and attestations; mark `Last Review` accordingly.
+
+Checklist
+---------
+- Use `docs/ISMS/VENDOR_DPA_SECURITY_REVIEW_CHECKLIST.md` to collect DPAs/security evidence and populate the Evidence links above.

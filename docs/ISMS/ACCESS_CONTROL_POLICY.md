@@ -33,3 +33,9 @@ Evidence to collect
 - Cloud IAM role export (monthly) with diffs.
 - CI secret inventory and rotation log (quarterly).
 - MFA/SSO enforcement screenshots.
+
+Automation helpers
+------------------
+- GitHub access export: `ops/access-review/export-github-access.ps1` (repo collaborators/teams, secret name inventory, branch protection when permitted).
+- GCP IAM export: `ops/access-review/export-gcp-iam.ps1` (project IAM policy + service accounts; optional org policies when permitted).
+  - Store outputs in the secure evidence share and link them from `docs/ISMS/ACCESS_REVIEW_LOG.md`.

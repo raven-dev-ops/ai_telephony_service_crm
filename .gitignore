@@ -38,3 +38,10 @@ ai_telephony_service_crm.wiki.local/
 
 # Local issue backlog scratchpad
 github-issues-backlog.md
+
+# Evidence exports (do not commit)
+github-access-evidence-*.json
+gcp-iam-evidence-*.json
+speech-report*.json
+export-evidence.json
+restore-evidence.json

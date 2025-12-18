@@ -23,3 +23,8 @@ Outputs
 -------
 - Internal audit report with findings, severities, and due dates; track as GitHub issues labeled `audit`.
 - Management review minutes with decisions on risk acceptance and resource allocations.
+
+Templates
+---------
+- Internal audit report: `docs/ISMS/INTERNAL_AUDIT_REPORT_TEMPLATE.md`
+- Management review minutes: `docs/ISMS/MANAGEMENT_REVIEW_MINUTES_TEMPLATE.md`

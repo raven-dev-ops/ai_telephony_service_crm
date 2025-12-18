@@ -21,6 +21,7 @@ Quick map
   - Logging, monitoring, and alert rules: `LOGGING_AND_ALERTS.md`
   - Vendor inventory and DPAs: `VENDOR_REGISTER.md`
 - Audit cadence and certification plan: `AUDIT_AND_MANAGEMENT_REVIEW.md`
+  - Templates: `INTERNAL_AUDIT_REPORT_TEMPLATE.md`, `MANAGEMENT_REVIEW_MINUTES_TEMPLATE.md`
 
 How to use
 ----------

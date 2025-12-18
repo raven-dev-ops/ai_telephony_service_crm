@@ -18,6 +18,7 @@ import argparse
 import asyncio
 import base64
 import json
+import platform
 import re
 import statistics
 import sys
@@ -73,6 +74,26 @@ def _stats(values_ms: list[float]) -> dict[str, Any]:
         "p99_ms": round(_percentile(sorted_vals, 0.99), 2),
         "min_ms": round(sorted_vals[0], 2),
         "max_ms": round(sorted_vals[-1], 2),
+    }
+
+
+def _safe_speech_config(settings: Any) -> dict[str, Any]:
+    speech = getattr(settings, "speech", None)
+    if speech is None:
+        return {}
+
+    return {
+        "provider": getattr(speech, "provider", None),
+        "openai_api_base": getattr(speech, "openai_api_base", None),
+        "openai_stt_model": getattr(speech, "openai_stt_model", None),
+        "openai_tts_model": getattr(speech, "openai_tts_model", None),
+        "openai_tts_voice": getattr(speech, "openai_tts_voice", None),
+        "openai_api_key_configured": bool(getattr(speech, "openai_api_key", None)),
+        "gcp_language_code": getattr(speech, "gcp_language_code", None),
+        "gcp_stt_model": getattr(speech, "gcp_stt_model", None),
+        "gcp_tts_voice": getattr(speech, "gcp_tts_voice", None),
+        "gcp_tts_audio_encoding": getattr(speech, "gcp_tts_audio_encoding", None),
+        "gcp_timeout_seconds": getattr(speech, "gcp_timeout_seconds", None),
     }
 
 
@@ -144,6 +165,7 @@ async def run_validation(
 ) -> dict[str, Any]:
     health = await conversation.speech_service.health()
     settings = get_settings()
+    diagnostics = conversation.speech_service.diagnostics()
 
     turn_results: list[dict[str, Any]] = []
     stt_ms: list[float] = []
@@ -239,8 +261,14 @@ async def run_validation(
         "voice": voice,
         "business_id": business_id,
         "runs": runs,
+        "runtime": {
+            "python": sys.version.split()[0],
+            "platform": platform.platform(),
+        },
+        "speech_config": _safe_speech_config(settings),
         "samples": [s.sample_id for s in samples],
         "health": health,
+        "diagnostics": diagnostics,
         "counts": {
             "turns": len(turn_results),
             "empty_transcripts": empty_transcripts,
