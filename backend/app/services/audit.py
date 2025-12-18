@@ -99,7 +99,11 @@ def hash_value(value: str | None) -> str | None:
         return None
     salt = os.getenv("AUDIT_HASH_SALT", "")
     try:
-        digest = hashlib.sha256(f"{salt}{value}".encode("utf-8")).hexdigest()
+        digest = hashlib.blake2b(
+            value.encode("utf-8"),
+            key=salt.encode("utf-8"),
+            digest_size=16,
+        ).hexdigest()
     except Exception:
         return None
     return digest[:24]
