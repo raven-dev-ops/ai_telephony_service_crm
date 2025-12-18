@@ -1,4 +1,3 @@
-import os
 from uuid import uuid4
 
 import pytest
@@ -10,9 +9,9 @@ from app.db_models import BusinessDB
 from app.metrics import metrics
 
 
-def _fresh_client(env: dict[str, str]) -> TestClient:
+def _fresh_client(monkeypatch: pytest.MonkeyPatch, env: dict[str, str]) -> TestClient:
     for k, v in env.items():
-        os.environ[k] = v
+        monkeypatch.setenv(k, v)
     config.get_settings.cache_clear()
     deps.get_settings.cache_clear()
     app = main.create_app()
@@ -40,6 +39,7 @@ def test_rate_limit_blocks_after_burst(monkeypatch):
     metrics.rate_limit_blocks_by_route.clear()
     metrics.rate_limit_blocks_by_route_business.clear()
     client = _fresh_client(
+        monkeypatch,
         {
             "RATE_LIMIT_PER_MINUTE": "1",
             "RATE_LIMIT_BURST": "1",
@@ -59,6 +59,7 @@ def test_rate_limit_blocks_after_burst(monkeypatch):
 
 def test_rate_limit_whitelist_ips_allows_requests(monkeypatch):
     client = _fresh_client(
+        monkeypatch,
         {
             "RATE_LIMIT_PER_MINUTE": "1",
             "RATE_LIMIT_BURST": "1",
@@ -78,6 +79,7 @@ def test_rate_limit_whitelist_ips_allows_requests(monkeypatch):
 )
 def test_public_signup_is_rate_limited(monkeypatch):
     client = _fresh_client(
+        monkeypatch,
         {
             "ALLOW_SELF_SIGNUP": "true",
             "RATE_LIMIT_PER_MINUTE": "1",
@@ -107,6 +109,7 @@ def test_public_signup_is_rate_limited(monkeypatch):
 )
 def test_lockdown_blocks_widget_requests(monkeypatch):
     client = _fresh_client(
+        monkeypatch,
         {
             "RATE_LIMIT_PER_MINUTE": "120",
             "RATE_LIMIT_BURST": "20",
@@ -149,6 +152,7 @@ def test_lockdown_blocks_widget_requests(monkeypatch):
 )
 def test_lockdown_blocks_widget_message_without_headers(monkeypatch):
     client = _fresh_client(
+        monkeypatch,
         {
             "RATE_LIMIT_PER_MINUTE": "120",
             "RATE_LIMIT_BURST": "20",
@@ -208,6 +212,7 @@ def test_lockdown_blocks_widget_message_without_headers(monkeypatch):
 )
 def test_owner_can_toggle_lockdown_via_endpoint(monkeypatch):
     client = _fresh_client(
+        monkeypatch,
         {
             "RATE_LIMIT_PER_MINUTE": "120",
             "RATE_LIMIT_BURST": "20",
@@ -253,6 +258,7 @@ def test_owner_can_toggle_lockdown_via_endpoint(monkeypatch):
 )
 def test_admin_can_toggle_lockdown_via_business_patch(monkeypatch):
     client = _fresh_client(
+        monkeypatch,
         {
             "RATE_LIMIT_PER_MINUTE": "120",
             "RATE_LIMIT_BURST": "20",
