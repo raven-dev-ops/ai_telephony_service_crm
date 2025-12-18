@@ -44,7 +44,7 @@ def test_rate_limit_blocks_after_burst(monkeypatch):
             "RATE_LIMIT_PER_MINUTE": "1",
             "RATE_LIMIT_BURST": "1",
             "RATE_LIMIT_DISABLED": "false",
-        }
+        },
     )
     _ensure_business()
     first = client.post("/v1/widget/start", json={})
@@ -65,7 +65,7 @@ def test_rate_limit_whitelist_ips_allows_requests(monkeypatch):
             "RATE_LIMIT_BURST": "1",
             "RATE_LIMIT_DISABLED": "false",
             "RATE_LIMIT_WHITELIST_IPS": "testclient",
-        }
+        },
     )
     _ensure_business()
     for _ in range(3):
@@ -85,7 +85,7 @@ def test_public_signup_is_rate_limited(monkeypatch):
             "RATE_LIMIT_PER_MINUTE": "1",
             "RATE_LIMIT_BURST": "1",
             "RATE_LIMIT_DISABLED": "false",
-        }
+        },
     )
     first = client.post(
         "/v1/public/signup",
@@ -114,7 +114,7 @@ def test_lockdown_blocks_widget_requests(monkeypatch):
             "RATE_LIMIT_PER_MINUTE": "120",
             "RATE_LIMIT_BURST": "20",
             "RATE_LIMIT_DISABLED": "false",
-        }
+        },
     )
     _ensure_business()
     session = SessionLocal()
@@ -157,7 +157,7 @@ def test_lockdown_blocks_widget_message_without_headers(monkeypatch):
             "RATE_LIMIT_PER_MINUTE": "120",
             "RATE_LIMIT_BURST": "20",
             "RATE_LIMIT_DISABLED": "false",
-        }
+        },
     )
     _ensure_business()
     locked_business_id = "biz_locked"
@@ -217,7 +217,7 @@ def test_owner_can_toggle_lockdown_via_endpoint(monkeypatch):
             "RATE_LIMIT_PER_MINUTE": "120",
             "RATE_LIMIT_BURST": "20",
             "RATE_LIMIT_DISABLED": "false",
-        }
+        },
     )
     _ensure_business()
     session = SessionLocal()
@@ -263,7 +263,7 @@ def test_admin_can_toggle_lockdown_via_business_patch(monkeypatch):
             "RATE_LIMIT_PER_MINUTE": "120",
             "RATE_LIMIT_BURST": "20",
             "RATE_LIMIT_DISABLED": "false",
-        }
+        },
     )
     _ensure_business()
 
