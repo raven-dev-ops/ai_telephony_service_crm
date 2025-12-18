@@ -52,6 +52,7 @@ class SessionStore(Protocol):
         caller_phone: str | None = None,
         business_id: str = "default_business",
         lead_source: str | None = None,
+        channel: str = "phone",
     ) -> CallSession: ...
 
     def get(self, session_id: str) -> CallSession | None: ...
@@ -70,13 +71,14 @@ class InMemorySessionStore:
         caller_phone: str | None = None,
         business_id: str = "default_business",
         lead_source: str | None = None,
+        channel: str = "phone",
     ) -> CallSession:
         session_id = str(uuid4())
         session = CallSession(
             id=session_id,
             caller_phone=caller_phone,
             business_id=business_id,
-            channel="phone",
+            channel=channel,
             lead_source=lead_source,
         )
         self._sessions[session_id] = session
@@ -118,6 +120,7 @@ class RedisSessionStore:
         caller_phone: str | None = None,
         business_id: str = "default_business",
         lead_source: str | None = None,
+        channel: str = "phone",
     ) -> CallSession:
         session_id = str(uuid4())
         now = datetime.now(UTC)
@@ -125,7 +128,7 @@ class RedisSessionStore:
             id=session_id,
             caller_phone=caller_phone,
             business_id=business_id,
-            channel="phone",
+            channel=channel,
             created_at=now,
             updated_at=now,
             lead_source=lead_source,

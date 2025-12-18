@@ -467,10 +467,8 @@ class ConversationManager:
                 session.intent = session.intent or None
                 session.intent_confidence = getattr(session, "intent_confidence", None)
         threshold = _intent_threshold_for_business(business_id)
-        if (
-            getattr(session, "intent_confidence", None) is not None
-            and session.intent_confidence < threshold
-        ):
+        intent_confidence = getattr(session, "intent_confidence", None)
+        if intent_confidence is not None and intent_confidence < threshold:
             intent_low_confidence = True
             session.intent = None
         normalized_intent_label = _normalize_intent_label(session.intent)
@@ -509,9 +507,25 @@ class ConversationManager:
                 session.emergency_confidence = max(session.emergency_confidence, 0.95)
                 session.emergency_reasons.append("user_confirmed")
                 session.emergency_confirmation_pending = False
+                normalized = ""
+                lower = ""
             elif norm_simple in NEGATIVE:
                 session.emergency_confirmation_pending = False
                 session.emergency_confidence = min(session.emergency_confidence, 0.3)
+                normalized = ""
+                lower = ""
+            else:
+                reason_text = (
+                    session.emergency_reasons[0]
+                    if getattr(session, "emergency_reasons", None)
+                    else "details provided"
+                )
+                prompt = conversation_text(
+                    language_code, "emergency_confirm", reason=reason_text
+                )
+                return ConversationResult(
+                    reply_text=prompt, new_state=_session_state(session)
+                )
 
         # Score emergency signals deterministically.
         emergency_conf, reasons = _score_emergency_signal(
@@ -858,10 +872,10 @@ class ConversationManager:
                 service_type,
                 session.is_emergency,
             )
-            quoted_value = None
+            quoted_value: int | None = None
             quote_status: str | None = None
             if quoted_min is not None and quoted_max is not None:
-                quoted_value = float((quoted_min + quoted_max) / 2.0)
+                quoted_value = int(round((quoted_min + quoted_max) / 2.0))
                 quote_status = "QUOTED"
 
             # Mirror into in-memory CRM repositories.

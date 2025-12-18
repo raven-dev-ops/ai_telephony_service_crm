@@ -6,13 +6,12 @@ from pydantic import BaseModel
 from ..config import get_settings
 from ..deps import ensure_business_active
 from ..repositories import conversations_repo, customers_repo
-from ..services.conversation import ConversationManager
+from ..services import conversation, sessions
 from ..db import SQLALCHEMY_AVAILABLE, SessionLocal
 from ..db_models import BusinessDB
 
 
 router = APIRouter()
-manager = ConversationManager()
 
 
 class ChatStartRequest(BaseModel):
@@ -58,9 +57,11 @@ async def widget_business(
         finally:
             session_db.close()
         if row is not None and getattr(row, "name", None):
-            name = row.name
+            name = str(getattr(row, "name", name) or name)
         if row is not None and getattr(row, "language_code", None):
-            language_code = row.language_code
+            language_code = str(
+                getattr(row, "language_code", language_code) or language_code
+            )
     return WidgetBusinessResponse(
         id=business_id, name=name, language_code=language_code
     )
@@ -76,31 +77,20 @@ async def start_chat(
         customer = customers_repo.get_by_phone(
             payload.customer_phone, business_id=business_id
         )
-        if customer is None:
-            customer = customers_repo.upsert(
-                name=payload.customer_name or "",
-                phone=payload.customer_phone,
-                email=payload.customer_email,
-                address=None,
-                business_id=business_id,
-            )
+    session = sessions.session_store.create(
+        caller_phone=payload.customer_phone,
+        business_id=business_id,
+        lead_source=payload.lead_source,
+        channel="web",
+    )
     conv = conversations_repo.create(
         channel="web",
         customer_id=customer.id if customer else None,
+        session_id=session.id,
         business_id=business_id,
     )
 
-    # For now, treat the first turn as if we are at GREETING with no prior input.
-    from ..services.sessions import CallSession  # local import to avoid cycles
-
-    session = CallSession(
-        id=conv.id,
-        caller_phone=payload.customer_phone,
-        business_id=business_id,
-        channel="web",
-        lead_source=payload.lead_source,
-    )
-    result = await manager.handle_input(session, None)
+    result = await conversation.conversation_manager.handle_input(session, None)
     conversations_repo.append_message(conv.id, role="assistant", text=result.reply_text)
     return ChatStartResponse(conversation_id=conv.id, reply_text=result.reply_text)
 
@@ -113,15 +103,20 @@ async def chat_message(
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    from ..services.sessions import CallSession  # local import to avoid cycles
-
-    session = CallSession(
-        id=conversation_id,
-        business_id=conv.business_id,
-        channel=conv.channel or "web",
-    )
+    session_id = getattr(conv, "session_id", None)
+    if not session_id:
+        raise HTTPException(
+            status_code=409, detail="Chat session expired. Please start a new chat."
+        )
+    session = sessions.session_store.get(session_id)
+    if not session:
+        raise HTTPException(
+            status_code=409, detail="Chat session expired. Please start a new chat."
+        )
+    session.channel = conv.channel or session.channel
+    session.business_id = conv.business_id or session.business_id
     conversations_repo.append_message(conversation_id, role="user", text=payload.text)
-    result = await manager.handle_input(session, payload.text)
+    result = await conversation.conversation_manager.handle_input(session, payload.text)
     conversations_repo.append_message(
         conversation_id, role="assistant", text=result.reply_text
     )
