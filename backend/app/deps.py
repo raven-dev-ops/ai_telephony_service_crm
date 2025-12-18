@@ -10,9 +10,19 @@ from .db import SQLALCHEMY_AVAILABLE, SessionLocal
 from .db_models import BusinessDB, BusinessUserDB
 from .services.auth import TokenError, decode_token
 from .services import subscription as subscription_service
+from .services import audit as audit_service
 from .metrics import metrics
 
 DEFAULT_BUSINESS_ID = "default_business"
+
+
+def _security_events_enabled(request: Request | None) -> bool:
+    if request is None:
+        return False
+    try:
+        return not bool(getattr(request.state, "suppress_security_events", False))
+    except Exception:
+        return True
 
 
 async def get_business_id(
@@ -20,6 +30,7 @@ async def get_business_id(
     x_api_key: str | None = Header(default=None, alias="X-API-Key"),
     x_widget_token: str | None = Header(default=None, alias="X-Widget-Token"),
     authorization: str | None = Header(default=None, alias="Authorization"),
+    request: Request = None,
 ) -> str:
     """Resolve the current business/tenant ID from the request.
 
@@ -50,6 +61,16 @@ async def get_business_id(
             decoded = decode_token(token, settings, expected_type="access")
             token_business_id = decoded.business_id
         except TokenError:
+            if _security_events_enabled(request):
+                await audit_service.record_security_event(
+                    request=request,
+                    event_type=audit_service.SECURITY_EVENT_AUTH_FAILURE,
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    meta={
+                        "reason": "bearer_token_invalid",
+                        "token_hash": audit_service.hash_value(token),
+                    },
+                )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or expired token",
@@ -97,6 +118,19 @@ async def get_business_id(
                     if expires_at is not None and expires_at.tzinfo is None:
                         expires_at = expires_at.replace(tzinfo=UTC)
                     if expires_at is not None and expires_at < now:
+                        if _security_events_enabled(request):
+                            await audit_service.record_security_event(
+                                request=request,
+                                event_type=audit_service.SECURITY_EVENT_AUTH_FAILURE,
+                                status_code=status.HTTP_401_UNAUTHORIZED,
+                                business_id=cast(str, getattr(business, "id", None)),
+                                meta={
+                                    "reason": "widget_token_expired",
+                                    "widget_token_hash": audit_service.hash_value(
+                                        x_widget_token
+                                    ),
+                                },
+                            )
                         raise HTTPException(
                             status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Widget token expired",
@@ -121,6 +155,20 @@ async def get_business_id(
             # routes that set dummy keys.
             if is_testing and x_api_key and not require_business_api_key:
                 return x_business_id or DEFAULT_BUSINESS_ID
+            if _security_events_enabled(request):
+                await audit_service.record_security_event(
+                    request=request,
+                    event_type=audit_service.SECURITY_EVENT_AUTH_FAILURE,
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    business_id=x_business_id,
+                    meta={
+                        "reason": "tenant_credentials_invalid",
+                        "credential_type": "api_key" if x_api_key else "widget_token",
+                        "credential_hash": audit_service.hash_value(
+                            x_api_key or x_widget_token
+                        ),
+                    },
+                )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid tenant credentials",
@@ -135,6 +183,14 @@ async def get_business_id(
         and not x_api_key
         and not x_widget_token
     ):
+        if _security_events_enabled(request):
+            await audit_service.record_security_event(
+                request=request,
+                event_type=audit_service.SECURITY_EVENT_AUTH_FAILURE,
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                business_id=None,
+                meta={"reason": "tenant_credentials_missing"},
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing tenant credentials",
@@ -261,6 +317,7 @@ async def require_subscription_active(
 
 
 async def require_admin_auth(
+    request: Request = None,
     x_admin_api_key: str | None = Header(default=None, alias="X-Admin-API-Key"),
 ) -> None:
     """Optional admin authentication for /v1/admin routes.
@@ -276,6 +333,16 @@ async def require_admin_auth(
         return
 
     if x_admin_api_key != expected:
+        if _security_events_enabled(request):
+            await audit_service.record_security_event(
+                request=request,
+                event_type=audit_service.SECURITY_EVENT_AUTH_FAILURE,
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                meta={
+                    "reason": "admin_api_key_invalid",
+                    "credential_hash": audit_service.hash_value(x_admin_api_key),
+                },
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid admin API key",
@@ -284,6 +351,7 @@ async def require_admin_auth(
 
 
 async def require_owner_dashboard_auth(
+    request: Request = None,
     x_owner_token: str | None = Header(default=None, alias="X-Owner-Token"),
 ) -> None:
     """Optional owner/dashboard authentication for CRM & owner routes.
@@ -303,6 +371,16 @@ async def require_owner_dashboard_auth(
         return
 
     if x_owner_token != expected:
+        if _security_events_enabled(request):
+            await audit_service.record_security_event(
+                request=request,
+                event_type=audit_service.SECURITY_EVENT_AUTH_FAILURE,
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                meta={
+                    "reason": "owner_dashboard_token_invalid",
+                    "credential_hash": audit_service.hash_value(x_owner_token),
+                },
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid owner dashboard token",
@@ -326,6 +404,7 @@ def require_dashboard_role(
     allowed_set = {r.lower() for r in allowed_roles}
 
     async def _dep(
+        request: Request = None,
         x_owner_token: str | None = Header(default=None, alias="X-Owner-Token"),
         x_admin_api_key: str | None = Header(default=None, alias="X-Admin-API-Key"),
         x_user_id: str | None = Header(default=None, alias="X-User-ID"),
@@ -341,6 +420,17 @@ def require_dashboard_role(
             try:
                 decoded = decode_token(token, settings, expected_type="access")
             except TokenError:
+                if _security_events_enabled(request):
+                    await audit_service.record_security_event(
+                        request=request,
+                        event_type=audit_service.SECURITY_EVENT_AUTH_FAILURE,
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        business_id=business_id,
+                        meta={
+                            "reason": "bearer_token_invalid",
+                            "token_hash": audit_service.hash_value(token),
+                        },
+                    )
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid or expired token",
@@ -395,6 +485,14 @@ def require_dashboard_role(
         # If a dashboard token is configured, credentials are mandatory.
         if settings.owner_dashboard_token:
             if not roles:
+                if _security_events_enabled(request):
+                    await audit_service.record_security_event(
+                        request=request,
+                        event_type=audit_service.SECURITY_EVENT_AUTH_FAILURE,
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        business_id=business_id,
+                        meta={"reason": "dashboard_credentials_missing"},
+                    )
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Missing dashboard credentials",

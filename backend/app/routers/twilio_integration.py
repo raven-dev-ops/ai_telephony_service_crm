@@ -27,6 +27,7 @@ from ..repositories import conversations_repo, customers_repo, appointments_repo
 from ..services import (
     appointment_actions,
     conversation,
+    audit as audit_service,
     sessions,
     subscription as subscription_service,
 )
@@ -103,7 +104,13 @@ async def _maybe_verify_twilio_signature(
 
     twilio_sig = request.headers.get("X-Twilio-Signature")
     if not twilio_sig:
-        logger.warning("twilio_signature_missing", extra={"path": str(request.url)})
+        await audit_service.record_security_event(
+            request=request,
+            event_type=audit_service.SECURITY_EVENT_WEBHOOK_SIGNATURE_MISSING,
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            business_id=request.query_params.get("business_id"),
+            meta={"provider": "twilio"},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing Twilio signature",
@@ -136,7 +143,13 @@ async def _maybe_verify_twilio_signature(
     expected_sig = base64.b64encode(digest).decode("utf-8")
 
     if not hmac.compare_digest(expected_sig, twilio_sig):
-        logger.warning("twilio_signature_invalid", extra={"path": str(request.url)})
+        await audit_service.record_security_event(
+            request=request,
+            event_type=audit_service.SECURITY_EVENT_WEBHOOK_SIGNATURE_INVALID,
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            business_id=request.query_params.get("business_id"),
+            meta={"provider": "twilio"},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid Twilio signature",
@@ -155,6 +168,13 @@ async def _maybe_verify_twilio_signature(
                 detail="Invalid Twilio timestamp",
             )
         if abs(time.time() - ts_val) > replay_window:
+            await audit_service.record_security_event(
+                request=request,
+                event_type=audit_service.SECURITY_EVENT_WEBHOOK_REPLAY_BLOCKED,
+                status_code=status.HTTP_400_BAD_REQUEST,
+                business_id=request.query_params.get("business_id"),
+                meta={"provider": "twilio", "reason": "timestamp_out_of_window"},
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Twilio request timestamp outside allowed window",
@@ -164,7 +184,18 @@ async def _maybe_verify_twilio_signature(
         "Twilio-Event-Id"
     )
     if event_id:
-        _check_twilio_replay(event_id, replay_window)
+        try:
+            _check_twilio_replay(event_id, replay_window)
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_409_CONFLICT:
+                await audit_service.record_security_event(
+                    request=request,
+                    event_type=audit_service.SECURITY_EVENT_WEBHOOK_REPLAY_BLOCKED,
+                    status_code=exc.status_code,
+                    business_id=request.query_params.get("business_id"),
+                    meta={"provider": "twilio", "reason": "event_id_replay"},
+                )
+            raise
 
 
 def _get_business_name(business_id: str | None) -> str:

@@ -14,6 +14,7 @@ from ..deps import ensure_business_active, require_owner_dashboard_auth
 from ..db import SQLALCHEMY_AVAILABLE, SessionLocal
 from ..db_models import BusinessDB
 from ..metrics import metrics
+from ..services import audit as audit_service
 from ..services import subscription as subscription_service
 from ..services.stripe_webhook import (
     StripeReplayError,
@@ -345,6 +346,12 @@ async def billing_webhook(
         event_payload: dict = {}
         if require_sig and not settings.use_stub:
             if not stripe_signature:
+                await audit_service.record_security_event(
+                    request=request,
+                    event_type=audit_service.SECURITY_EVENT_WEBHOOK_SIGNATURE_MISSING,
+                    status_code=400,
+                    meta={"provider": "stripe"},
+                )
                 raise HTTPException(
                     status_code=400, detail="Missing Stripe-Signature header"
                 )
@@ -360,9 +367,14 @@ async def billing_webhook(
                         secret=settings.webhook_secret,
                     )
                 except Exception as exc:
-                    logger.warning(
-                        "billing_webhook_signature_invalid",
-                        extra={"error": str(exc)},
+                    await audit_service.record_security_event(
+                        request=request,
+                        event_type=audit_service.SECURITY_EVENT_WEBHOOK_SIGNATURE_INVALID,
+                        status_code=400,
+                        meta={
+                            "provider": "stripe",
+                            "error_class": exc.__class__.__name__,
+                        },
                     )
                     raise HTTPException(
                         status_code=400, detail="Invalid webhook signature"
@@ -373,10 +385,22 @@ async def billing_webhook(
                     verify_stripe_signature(
                         raw_body, stripe_signature, settings.webhook_secret
                     )
-                except (StripeSignatureError, StripeReplayError) as exc:
-                    logger.warning(
-                        "billing_webhook_signature_invalid",
-                        extra={"error": str(exc)},
+                except StripeReplayError as exc:
+                    await audit_service.record_security_event(
+                        request=request,
+                        event_type=audit_service.SECURITY_EVENT_WEBHOOK_REPLAY_BLOCKED,
+                        status_code=400,
+                        meta={"provider": "stripe", "reason": str(exc)},
+                    )
+                    raise HTTPException(
+                        status_code=400, detail="Invalid webhook signature"
+                    ) from exc
+                except StripeSignatureError as exc:
+                    await audit_service.record_security_event(
+                        request=request,
+                        event_type=audit_service.SECURITY_EVENT_WEBHOOK_SIGNATURE_INVALID,
+                        status_code=400,
+                        meta={"provider": "stripe", "reason": str(exc)},
                     )
                     raise HTTPException(
                         status_code=400, detail="Invalid webhook signature"
@@ -486,6 +510,13 @@ async def billing_webhook(
             return {"received": True}
     except StripeReplayError as exc:
         metrics.billing_webhook_failures += 1
+        await audit_service.record_security_event(
+            request=request,
+            event_type=audit_service.SECURITY_EVENT_WEBHOOK_REPLAY_BLOCKED,
+            status_code=400,
+            business_id=business_id,
+            meta={"provider": "stripe", "reason": str(exc)},
+        )
         logger.warning(
             "billing_webhook_replay_blocked",
             extra={

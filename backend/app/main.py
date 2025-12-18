@@ -17,7 +17,12 @@ from .logging_config import configure_logging
 from .metrics import RouteMetrics, metrics
 from .context import request_id_ctx
 from . import observability
-from .services.audit import record_audit_event
+from .services.audit import (
+    SECURITY_EVENT_RATE_LIMIT_BLOCKED,
+    hash_value,
+    record_audit_event,
+    record_security_event,
+)
 from .services.retention_purge import start_retention_scheduler
 from .services.rate_limit import RateLimiter, RateLimitError
 from .services.job_queue import job_queue
@@ -315,12 +320,17 @@ def create_app() -> FastAPI:
                             or header_business_id
                         )
                     if not business_id:
-                        business_id = await _deps.get_business_id(
-                            x_business_id=header_business_id,
-                            x_api_key=header_api_key,
-                            x_widget_token=header_widget_token,
-                            authorization=header_auth,
-                        )
+                        try:
+                            request.state.suppress_security_events = True
+                            business_id = await _deps.get_business_id(
+                                x_business_id=header_business_id,
+                                x_api_key=header_api_key,
+                                x_widget_token=header_widget_token,
+                                authorization=header_auth,
+                                request=request,
+                            )
+                        finally:
+                            request.state.suppress_security_events = False
                 except Exception:
                     business_id = None
                 observability.set_request_context(
@@ -359,13 +369,25 @@ def create_app() -> FastAPI:
                         )
                         + 1
                     )
-                    metrics.rate_limit_blocks_by_ip[client_ip] = (
-                        metrics.rate_limit_blocks_by_ip.get(client_ip, 0) + 1
+                    ip_metric_key = (
+                        hash_value(client_ip)
+                        if client_ip and client_ip != "unknown"
+                        else "unknown"
+                    )
+                    metrics.rate_limit_blocks_by_ip[ip_metric_key] = (
+                        metrics.rate_limit_blocks_by_ip.get(ip_metric_key, 0) + 1
                     )
                     response = Response(
                         status_code=429,
                         content="Rate limit exceeded. Please retry later.",
                         headers={"Retry-After": str(exc.retry_after_seconds)},
+                    )
+                    await record_security_event(
+                        request=request,
+                        event_type=SECURITY_EVENT_RATE_LIMIT_BLOCKED,
+                        status_code=429,
+                        business_id=business_id,
+                        meta={"retry_after_seconds": int(exc.retry_after_seconds)},
                     )
                     # Record audit information for rejected requests as well.
                     await record_audit_event(request, response.status_code)

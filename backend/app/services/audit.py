@@ -1,16 +1,28 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import Request
 
 from ..db import SQLALCHEMY_AVAILABLE, SessionLocal
-from ..db_models import AuditEventDB, BusinessDB
+from ..db_models import AuditEventDB, BusinessDB, SecurityEventDB
+from ..metrics import metrics
 from .privacy import redact_text
 
 logger = logging.getLogger(__name__)
+
+
+SECURITY_EVENT_WEBHOOK_SIGNATURE_MISSING = "webhook_signature_missing"
+SECURITY_EVENT_WEBHOOK_SIGNATURE_INVALID = "webhook_signature_invalid"
+SECURITY_EVENT_WEBHOOK_REPLAY_BLOCKED = "webhook_replay_blocked"
+SECURITY_EVENT_RATE_LIMIT_BLOCKED = "rate_limit_blocked"
+SECURITY_EVENT_AUTH_FAILURE = "auth_failure"
 
 
 @dataclass
@@ -79,6 +91,171 @@ def _derive_actor(request: Request) -> RequestActor:
 
     business_id = _resolve_business_id_from_headers(request)
     return RequestActor(role=role, business_id=business_id)
+
+
+def hash_value(value: str | None) -> str | None:
+    """Return a stable, salted hash suitable for logs/storage (no raw PII)."""
+    if not value:
+        return None
+    salt = os.getenv("AUDIT_HASH_SALT", "")
+    try:
+        digest = hashlib.sha256(f"{salt}{value}".encode("utf-8")).hexdigest()
+    except Exception:
+        return None
+    return digest[:24]
+
+
+def _best_effort_client_ip(request: Request) -> str | None:
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        first = forwarded_for.split(",", 1)[0].strip()
+        return first or None
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip() or None
+    if request.client:
+        return request.client.host or None
+    return None
+
+
+def _safe_meta_json(meta: dict[str, Any] | None) -> str | None:
+    if not meta:
+        return None
+    safe: dict[str, Any] = {}
+    for key, value in meta.items():
+        if value is None:
+            continue
+        if isinstance(value, (bool, int, float)):
+            safe[str(key)] = value
+            continue
+        if isinstance(value, str):
+            safe[str(key)] = redact_text(value)[:200]
+            continue
+        # Drop complex types to avoid accidentally storing payloads.
+    if not safe:
+        return None
+    try:
+        raw = json.dumps(safe, ensure_ascii=False, separators=(",", ":"))
+    except Exception:
+        return None
+    # Keep storage/log size bounded.
+    return raw[:1000]
+
+
+async def record_security_event(
+    *,
+    request: Request | None,
+    event_type: str,
+    status_code: int,
+    business_id: str | None = None,
+    severity: str = "warning",
+    meta: dict[str, Any] | None = None,
+) -> None:
+    """Record a security-relevant event to logs + (when available) the database.
+
+    This is designed to be safe-by-default:
+    - Do not store raw tokens, signatures, request bodies, IPs, or phone numbers.
+    - Hash potentially sensitive values (e.g., IP, user agent) for correlation.
+    """
+    try:
+        request_id = None
+        path = "-"
+        method = "-"
+        actor_type = "unknown"
+        ip_hash = None
+        user_agent_hash = None
+        actor_business_id = None
+
+        if request is not None:
+            try:
+                request_id = getattr(request.state, "request_id", None)
+            except Exception:
+                request_id = None
+            try:
+                path = redact_text(request.url.path)
+            except Exception:
+                path = "-"
+            method = getattr(request, "method", "-") or "-"
+            try:
+                actor = _derive_actor(request)
+                actor_type = actor.role
+                actor_business_id = actor.business_id
+            except Exception:
+                actor_type = "unknown"
+                actor_business_id = None
+            try:
+                ip_hash = hash_value(_best_effort_client_ip(request))
+            except Exception:
+                ip_hash = None
+            try:
+                user_agent_hash = hash_value(request.headers.get("User-Agent"))
+            except Exception:
+                user_agent_hash = None
+
+        effective_business_id = business_id or actor_business_id
+        meta_json = _safe_meta_json(meta)
+
+        # Metrics counters (best-effort).
+        try:
+            metrics.security_events_total += 1
+            metrics.security_events_by_type[event_type] = (
+                metrics.security_events_by_type.get(event_type, 0) + 1
+            )
+            biz_key = effective_business_id or "unknown"
+            per_biz = metrics.security_events_by_business.setdefault(biz_key, {})
+            per_biz[event_type] = per_biz.get(event_type, 0) + 1
+        except Exception:
+            logger.debug("security_event_metrics_failed", exc_info=True)
+
+        logger.warning(
+            "security_event",
+            extra={
+                "event_type": event_type,
+                "severity": severity,
+                "actor_type": actor_type,
+                "business_id": effective_business_id,
+                "path": path,
+                "method": method,
+                "status_code": status_code,
+                "ip_hash": ip_hash,
+                "user_agent_hash": user_agent_hash,
+                "request_id": request_id,
+                "meta": meta_json,
+            },
+        )
+
+        if not SQLALCHEMY_AVAILABLE or SessionLocal is None:
+            return
+
+        session = SessionLocal()
+        try:
+            now = datetime.now(UTC)
+            # Keep path reasonably bounded for storage.
+            stored_path = path
+            if len(stored_path) > 255:
+                stored_path = stored_path[:252] + "..."
+            event = SecurityEventDB(  # type: ignore[call-arg]
+                created_at=now,
+                event_type=event_type,
+                severity=severity,
+                actor_type=actor_type,
+                business_id=effective_business_id,
+                path=stored_path,
+                method=method,
+                status_code=status_code,
+                ip_hash=ip_hash,
+                user_agent_hash=user_agent_hash,
+                request_id=request_id,
+                meta=meta_json,
+            )
+            session.add(event)
+            session.commit()
+        except Exception:  # pragma: no cover - defensive
+            logger.exception("security_event_persist_failed")
+        finally:
+            session.close()
+    except Exception:  # pragma: no cover - never break request flow
+        logger.exception("security_event_record_failed")
 
 
 async def record_audit_event(request: Request, status_code: int) -> None:

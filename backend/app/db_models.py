@@ -214,6 +214,23 @@ if TYPE_CHECKING or SQLALCHEMY_AVAILABLE:
         method = Column(String, nullable=False)
         status_code = Column(Integer, nullable=False)
 
+    class SecurityEventDB(Base):
+        __tablename__ = "security_events"
+
+        id = Column(Integer, primary_key=True, autoincrement=True)
+        created_at = Column(DateTime, nullable=False, default=_utcnow, index=True)
+        event_type = Column(String, nullable=False, index=True)
+        severity = Column(String, nullable=False, default="warning")
+        actor_type = Column(String, nullable=False)
+        business_id = Column(String, nullable=True, index=True)
+        path = Column(String, nullable=False)
+        method = Column(String, nullable=False)
+        status_code = Column(Integer, nullable=False)
+        ip_hash = Column(String, nullable=True, index=True)
+        user_agent_hash = Column(String, nullable=True)
+        request_id = Column(String, nullable=True, index=True)
+        meta = Column(Text, nullable=True)
+
     class SmsAuditDB(Base):
         __tablename__ = "sms_audit"
 
@@ -303,6 +320,10 @@ else:  # pragma: no cover - for environments without SQLAlchemy
 
     class AuditEventDB:
         __tablename__ = "audit_events"
+        id: int
+
+    class SecurityEventDB:
+        __tablename__ = "security_events"
         id: int
 
     class SmsAuditDB:

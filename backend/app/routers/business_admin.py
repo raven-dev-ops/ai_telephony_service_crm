@@ -12,7 +12,13 @@ from pydantic import BaseModel, Field
 
 from ..config import get_settings
 from ..db import SQLALCHEMY_AVAILABLE, SessionLocal
-from ..db_models import AuditEventDB, BusinessDB, RetentionPurgeLogDB, TechnicianDB
+from ..db_models import (
+    AuditEventDB,
+    BusinessDB,
+    RetentionPurgeLogDB,
+    SecurityEventDB,
+    TechnicianDB,
+)
 from ..deps import require_admin_auth
 from ..metrics import metrics
 from ..repositories import appointments_repo, conversations_repo, customers_repo
@@ -300,6 +306,22 @@ class AuditEvent(BaseModel):
     path: str
     method: str
     status_code: int
+
+
+class SecurityEvent(BaseModel):
+    id: int
+    created_at: datetime
+    event_type: str
+    severity: str
+    actor_type: str
+    business_id: str | None = None
+    path: str
+    method: str
+    status_code: int
+    ip_hash: str | None = None
+    user_agent_hash: str | None = None
+    request_id: str | None = None
+    meta: str | None = None
 
 
 def _get_db_session():
@@ -1472,5 +1494,72 @@ def list_audit_events(
                 )
             )
         return events
+    finally:
+        session.close()
+
+
+@router.get("/security-events", response_model=list[SecurityEvent])
+def list_security_events(
+    business_id: str | None = None,
+    event_type: str | None = None,
+    request_id: str | None = None,
+    since_minutes: int | None = None,
+    limit: int = 100,
+    path_contains: str | None = None,
+) -> list[SecurityEvent]:
+    """Return recent security-relevant audit events for platform governance.
+
+    Events intentionally avoid raw PII: IP and user agent are hashed and
+    webhook payloads/tokens are never stored.
+    """
+    if not SQLALCHEMY_AVAILABLE or SessionLocal is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database support is not available",
+        )
+
+    if limit <= 0:
+        limit = 100
+    limit = min(limit, 500)
+
+    session = SessionLocal()
+    try:
+        query = session.query(SecurityEventDB).order_by(SecurityEventDB.id.desc())
+        if business_id:
+            query = query.filter(SecurityEventDB.business_id == business_id)
+        if event_type:
+            query = query.filter(SecurityEventDB.event_type == event_type)
+        if request_id:
+            query = query.filter(SecurityEventDB.request_id == request_id)
+        if since_minutes is not None and since_minutes > 0:
+            cutoff = datetime.now(UTC) - timedelta(minutes=since_minutes)
+            query = query.filter(SecurityEventDB.created_at >= cutoff)
+        if path_contains:
+            query = query.filter(SecurityEventDB.path.ilike(f"%{path_contains}%"))
+
+        rows = query.limit(limit).all()
+        out: list[SecurityEvent] = []
+        for row in rows:
+            created_at = getattr(row, "created_at", datetime.now(UTC)).replace(
+                tzinfo=UTC
+            )
+            out.append(
+                SecurityEvent(
+                    id=row.id,
+                    created_at=created_at,
+                    event_type=row.event_type,
+                    severity=getattr(row, "severity", "warning"),
+                    actor_type=row.actor_type,
+                    business_id=getattr(row, "business_id", None),
+                    path=row.path,
+                    method=row.method,
+                    status_code=row.status_code,
+                    ip_hash=getattr(row, "ip_hash", None),
+                    user_agent_hash=getattr(row, "user_agent_hash", None),
+                    request_id=getattr(row, "request_id", None),
+                    meta=getattr(row, "meta", None),
+                )
+            )
+        return out
     finally:
         session.close()

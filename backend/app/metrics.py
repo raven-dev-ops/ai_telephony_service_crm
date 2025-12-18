@@ -108,6 +108,9 @@ class Metrics:
     rate_limit_blocks_total: int = 0
     rate_limit_blocks_by_business: Dict[str, int] = field(default_factory=dict)
     rate_limit_blocks_by_ip: Dict[str, int] = field(default_factory=dict)
+    security_events_total: int = 0
+    security_events_by_type: Dict[str, int] = field(default_factory=dict)
+    security_events_by_business: Dict[str, Dict[str, int]] = field(default_factory=dict)
     sms_by_business: Dict[str, BusinessSmsMetrics] = field(default_factory=dict)
     twilio_voice_requests: int = 0
     twilio_voice_errors: int = 0
@@ -235,6 +238,12 @@ class Metrics:
             "rate_limit_blocks_total": self.rate_limit_blocks_total,
             "rate_limit_blocks_by_business": dict(self.rate_limit_blocks_by_business),
             "rate_limit_blocks_by_ip": dict(self.rate_limit_blocks_by_ip),
+            "security_events_total": self.security_events_total,
+            "security_events_by_type": dict(self.security_events_by_type),
+            "security_events_by_business": {
+                business_id: dict(types)
+                for business_id, types in self.security_events_by_business.items()
+            },
             "billing_webhook_failures": self.billing_webhook_failures,
             "background_job_errors": self.background_job_errors,
             "retention_purge_runs": self.retention_purge_runs,
