@@ -593,6 +593,10 @@
 
         gap: 0.5rem;
 
+        flex-wrap: wrap;
+
+        align-items: center;
+
       }
 
 
@@ -2296,6 +2300,12 @@
 
         }
 
+        #feedback-fab {
+          bottom: calc(var(--nav-height) + 16px) !important;
+          left: 16px !important;
+          right: auto !important;
+        }
+
       }
 
 
@@ -2314,6 +2324,17 @@
 
           justify-content: flex-start;
 
+          flex-wrap: wrap;
+
+        }
+
+        .controls > * {
+          flex: 1 1 140px;
+          min-width: 0;
+        }
+
+        #business-select {
+          min-width: 0 !important;
         }
 
         .status-bar {
@@ -2328,6 +2349,10 @@
 
           padding-bottom: calc(var(--nav-height) + 8px);
 
+        }
+
+        .assistant-panel {
+          width: min(360px, calc(100vw - 2rem));
         }
 
         .card table {

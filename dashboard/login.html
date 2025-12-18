@@ -23,7 +23,7 @@
       .shell {
         width: min(1080px, 100%);
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
         gap: 1.25rem;
       }
       .panel {
@@ -170,6 +170,12 @@
         transition: width 0.2s ease, background 0.2s ease;
       }
       .muted { color: #64748b; font-size: 0.85rem; }
+
+      @media (max-width: 480px) {
+        body { padding: 1rem; }
+        .panel { padding: 1.25rem; }
+        .help-item { flex-direction: column; align-items: flex-start; }
+      }
     </style>
   </head>
   <body>

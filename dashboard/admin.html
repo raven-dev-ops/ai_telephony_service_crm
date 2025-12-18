@@ -572,6 +572,34 @@
         background: #1e293b;
         color: #e2e8f0;
       }
+
+      @media (max-width: 960px) {
+        .header-bar {
+          padding: 0.9rem 1rem;
+        }
+
+        .container {
+          padding: 1rem;
+        }
+
+        .dashboard-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .header-content {
+          gap: 1rem;
+        }
+
+        h1 {
+          font-size: 1.25rem;
+        }
+
+        button {
+          padding: 0.6rem 0.9rem;
+        }
+      }
       
       .success { color: #059669; }
       .error { color: #dc2626; }

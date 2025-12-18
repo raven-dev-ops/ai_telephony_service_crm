@@ -166,6 +166,17 @@
         font-size: 0.75rem;
         margin-left: 0.25rem;
       }
+
+      @media (max-width: 640px) {
+        .page { padding: 1.25rem 1rem 2.25rem; }
+        .card { padding: 1.25rem; }
+        .header { flex-direction: column; align-items: flex-start; }
+        h1 { font-size: 1.35rem; }
+        .form-grid,
+        .credentials-grid { grid-template-columns: 1fr; }
+        .button-row { flex-direction: column; align-items: stretch; }
+        .button-row button { width: 100%; }
+      }
     </style>
   </head>
   <body>
