@@ -222,3 +222,133 @@ async def test_subscription_blocks_when_plan_limits_exceeded(monkeypatch):
         getattr(excinfo.value, "status_code", None) == status.HTTP_402_PAYMENT_REQUIRED
     )
     config.get_settings.cache_clear()
+
+
+@pytest.mark.anyio
+async def test_subscription_blocks_when_appointment_limit_exceeded(monkeypatch):
+    monkeypatch.setenv("ENFORCE_SUBSCRIPTION", "true")
+    config.get_settings.cache_clear()
+
+    session = SessionLocal()
+    try:
+        row = session.get(BusinessDB, DEFAULT_BUSINESS_ID)
+        row.subscription_status = "active"
+        row.service_tier = "starter"
+        row.subscription_current_period_end = datetime.now(UTC) + timedelta(days=365)
+        session.add(row)
+        session.commit()
+    finally:
+        session.close()
+
+    monkeypatch.setattr(
+        subscription_service,
+        "_usage_snapshot",
+        lambda business_id: subscription_service.UsageSnapshot(
+            calls=0, appointments=50
+        ),
+    )
+
+    with pytest.raises(Exception) as excinfo:
+        await subscription_service.check_access(
+            DEFAULT_BUSINESS_ID, upcoming_calls=0, upcoming_appointments=1
+        )
+
+    assert (
+        getattr(excinfo.value, "status_code", None) == status.HTTP_402_PAYMENT_REQUIRED
+    )
+    assert getattr(excinfo.value, "headers", {}).get("X-Plan-Limit") == "appointments"
+    config.get_settings.cache_clear()
+
+
+@pytest.mark.anyio
+async def test_subscription_graceful_returns_state_when_limit_exceeded(monkeypatch):
+    monkeypatch.setenv("ENFORCE_SUBSCRIPTION", "true")
+    config.get_settings.cache_clear()
+
+    session = SessionLocal()
+    try:
+        row = session.get(BusinessDB, DEFAULT_BUSINESS_ID)
+        row.subscription_status = "active"
+        row.service_tier = "starter"
+        row.subscription_current_period_end = datetime.now(UTC) + timedelta(days=365)
+        session.add(row)
+        session.commit()
+    finally:
+        session.close()
+
+    monkeypatch.setattr(
+        subscription_service,
+        "_usage_snapshot",
+        lambda business_id: subscription_service.UsageSnapshot(
+            calls=200, appointments=0
+        ),
+    )
+
+    state = await subscription_service.check_access(
+        DEFAULT_BUSINESS_ID,
+        upcoming_calls=1,
+        upcoming_appointments=0,
+        graceful=True,
+    )
+    assert state.blocked is True
+    assert state.block_reason == "call_limit"
+    config.get_settings.cache_clear()
+
+
+@pytest.mark.anyio
+async def test_subscription_sets_message_from_usage_warnings(monkeypatch):
+    monkeypatch.setenv("ENFORCE_SUBSCRIPTION", "true")
+    config.get_settings.cache_clear()
+
+    session = SessionLocal()
+    try:
+        row = session.get(BusinessDB, DEFAULT_BUSINESS_ID)
+        row.subscription_status = "active"
+        row.service_tier = "starter"
+        row.owner_email = None  # avoid reminder delivery side effects
+        row.subscription_current_period_end = datetime.now(UTC) + timedelta(days=365)
+        session.add(row)
+        session.commit()
+    finally:
+        session.close()
+
+    monkeypatch.setattr(
+        subscription_service,
+        "_usage_snapshot",
+        lambda business_id: subscription_service.UsageSnapshot(
+            calls=195, appointments=0
+        ),
+    )
+
+    state = await subscription_service.check_access(DEFAULT_BUSINESS_ID)
+    assert state.blocked is False
+    assert state.message and "Calls at 195/200" in state.message
+    config.get_settings.cache_clear()
+
+
+@pytest.mark.anyio
+async def test_subscription_state_helpers_cover_no_db_and_notify_failures(monkeypatch):
+    # compute_state short-circuits when DB is unavailable.
+    monkeypatch.setattr(subscription_service, "SQLALCHEMY_AVAILABLE", False)
+    monkeypatch.setattr(subscription_service, "SessionLocal", None)
+    state = subscription_service.compute_state(DEFAULT_BUSINESS_ID)
+    assert state.blocked is False
+
+    # notify_status_change returns early without DB.
+    await subscription_service.notify_status_change(DEFAULT_BUSINESS_ID, state)
+
+    # _notify_owner_if_needed is best-effort and tolerates failures.
+    dummy_business = type(
+        "B",
+        (),
+        {"id": DEFAULT_BUSINESS_ID, "owner_email": "owner@example.com"},
+    )()
+    subscription_service._reminder_cache.clear()
+
+    async def failing_notify(*args, **kwargs):
+        raise RuntimeError("email down")
+
+    monkeypatch.setattr(
+        subscription_service.email_service, "notify_owner", failing_notify
+    )
+    await subscription_service._notify_owner_if_needed(dummy_business, state)
