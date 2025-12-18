@@ -2,17 +2,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Dict, Optional, Protocol, Tuple
+from typing import Any, Dict, Optional, Protocol, Tuple
 import json
 import logging
 import os
 
 from ..config import get_settings
 
+redis_module: Any | None
 try:  # Optional Redis dependency, mirroring services/sessions.py
-    import redis
+    import redis as _redis
 except Exception:  # pragma: no cover - redis is optional
-    redis = None
+    redis_module = None
+else:
+    redis_module = _redis
 
 
 logger = logging.getLogger(__name__)
@@ -49,7 +52,13 @@ class TwilioStateStore(Protocol):
 
     def get_call_session(self, call_sid: str) -> Optional[CallSessionLink]: ...
 
-    def set_call_session(self, call_sid: str, session_id: str, state: str | None = None, event_id: str | None = None) -> None: ...
+    def set_call_session(
+        self,
+        call_sid: str,
+        session_id: str,
+        state: str | None = None,
+        event_id: str | None = None,
+    ) -> None: ...
 
     def clear_call_session(self, call_sid: str) -> Optional[CallSessionLink]: ...
 
@@ -148,7 +157,11 @@ class InMemoryTwilioStateStore:
         return self._call_map.get(call_sid)
 
     def set_call_session(
-        self, call_sid: str, session_id: str, state: str | None = None, event_id: str | None = None
+        self,
+        call_sid: str,
+        session_id: str,
+        state: str | None = None,
+        event_id: str | None = None,
     ) -> None:
         self._prune_call_sessions()
         self._call_map[call_sid] = CallSessionLink(
@@ -235,7 +248,7 @@ class RedisTwilioStateStore:
     _SMS_CONV_TTL_SECONDS = int(timedelta(days=7).total_seconds())
     _PENDING_ACTION_TTL_SECONDS = int(timedelta(minutes=30).total_seconds())
 
-    def __init__(self, client: "redis.Redis", key_prefix: str = "twilio_state") -> None:
+    def __init__(self, client: Any, key_prefix: str = "twilio_state") -> None:
         self._client = client
         self._prefix = key_prefix
 
@@ -275,7 +288,11 @@ class RedisTwilioStateStore:
             return None
 
     def set_call_session(
-        self, call_sid: str, session_id: str, state: str | None = None, event_id: str | None = None
+        self,
+        call_sid: str,
+        session_id: str,
+        state: str | None = None,
+        event_id: str | None = None,
     ) -> None:
         payload = {
             "session_id": session_id,
@@ -424,7 +441,7 @@ def _create_twilio_state_store() -> TwilioStateStore:
     get_settings()
     backend = os.getenv("TWILIO_STATE_BACKEND", "memory").lower()
     if backend == "redis":
-        if redis is None:
+        if redis_module is None:
             logger.warning(
                 "twilio_state_backend_redis_unavailable_falling_back",
                 extra={"backend": backend},
@@ -432,7 +449,7 @@ def _create_twilio_state_store() -> TwilioStateStore:
         else:
             try:
                 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-                client = redis.from_url(redis_url)
+                client = redis_module.from_url(redis_url)
                 return RedisTwilioStateStore(client)
             except Exception:
                 logger.warning(

@@ -344,9 +344,7 @@ def _business_to_response(row: BusinessDB) -> BusinessResponse:
         api_key_last_rotated_at=getattr(row, "api_key_last_rotated_at", None),
         widget_token=getattr(row, "widget_token", None),
         widget_token_last_used_at=getattr(row, "widget_token_last_used_at", None),
-        widget_token_last_rotated_at=getattr(
-            row, "widget_token_last_rotated_at", None
-        ),
+        widget_token_last_rotated_at=getattr(row, "widget_token_last_rotated_at", None),
         widget_token_expires_at=getattr(row, "widget_token_expires_at", None),
         calendar_id=getattr(row, "calendar_id", None),
         status=getattr(row, "status", "ACTIVE"),
@@ -599,9 +597,10 @@ def rotate_admin_api_key() -> TokenRotationResponse:
     settings.admin_api_key = new_token
     metrics.admin_token_last_rotated_at = now.isoformat()
     metrics.admin_token_last_used_at = None
+    kind = "admin_api_key"
     return TokenRotationResponse(
         token=new_token,
-        token_type="admin_api_key",
+        token_type=kind,
         rotated_at=now,
         last_used_at=None,
     )
@@ -616,9 +615,10 @@ def rotate_owner_dashboard_token() -> TokenRotationResponse:
     settings.owner_dashboard_token = new_token
     metrics.owner_token_last_rotated_at = now.isoformat()
     metrics.owner_token_last_used_at = None
+    kind = "owner_dashboard_token"
     return TokenRotationResponse(
         token=new_token,
-        token_type="owner_dashboard_token",
+        token_type=kind,
         rotated_at=now,
         last_used_at=None,
     )

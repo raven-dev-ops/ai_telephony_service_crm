@@ -104,7 +104,7 @@ async def notify_owner_with_fallback(
 
     delivered = sms_ok
     if delivered and email and send_email_copy:
-        email_result = await email_service.notify_owner(
+        await email_service.notify_owner(
             subject=subject or "Owner notification",
             body=message,
             business_id=business_id,

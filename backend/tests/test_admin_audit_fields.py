@@ -22,6 +22,12 @@ def test_admin_audit_includes_recent_requests_and_filters():
     assert isinstance(events, list)
     assert any("/healthz" in ev.get("path", "") for ev in events)
     sample = events[0]
-    assert {"id", "created_at", "actor_type", "business_id", "path", "method", "status_code"} <= set(
-        sample.keys()
-    )
+    assert {
+        "id",
+        "created_at",
+        "actor_type",
+        "business_id",
+        "path",
+        "method",
+        "status_code",
+    } <= set(sample.keys())

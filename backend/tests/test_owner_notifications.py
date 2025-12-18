@@ -1,5 +1,3 @@
-from datetime import datetime, UTC
-
 import pytest
 
 from app.deps import DEFAULT_BUSINESS_ID
@@ -55,7 +53,9 @@ async def test_notify_owner_falls_back_to_email(monkeypatch):
     async def fake_sms(body: str, business_id: str | None = None):
         return False
 
-    async def fake_email(subject: str, body: str, *, business_id: str, owner_email=None):
+    async def fake_email(
+        subject: str, body: str, *, business_id: str, owner_email=None
+    ):
         return EmailResult(sent=True, detail="ok", provider="stub")
 
     monkeypatch.setattr(sms_service, "notify_owner", fake_sms)

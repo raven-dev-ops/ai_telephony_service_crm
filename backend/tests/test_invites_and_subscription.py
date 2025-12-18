@@ -188,6 +188,7 @@ def test_subscription_reminder_sent_when_enforcement_disabled(monkeypatch):
     deps.get_settings.cache_clear()
     # Clear reminder cache to avoid previous tests blocking notifications.
     from app.services import subscription as subscription_service
+
     subscription_service._reminder_cache.clear()  # type: ignore[attr-defined]
 
     sent = []

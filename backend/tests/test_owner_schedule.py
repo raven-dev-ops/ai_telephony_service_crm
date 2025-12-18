@@ -111,7 +111,9 @@ def test_owner_today_summary_email_respects_owner_email(monkeypatch):
         calls["owner_email"] = owner_email
         return EmailResult(sent=True, provider="stub")
 
-    monkeypatch.setattr("app.routers.owner.email_service.notify_owner", fake_notify_owner)
+    monkeypatch.setattr(
+        "app.routers.owner.email_service.notify_owner", fake_notify_owner
+    )
 
     resp = client.post("/v1/owner/summary/today/email")
     assert resp.status_code == 200

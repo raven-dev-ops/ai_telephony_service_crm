@@ -215,7 +215,13 @@ def test_conversation_sends_email_confirmation_when_customer_has_email(monkeypat
 
     class FakeEmailService:
         async def send_email(
-            self, to=None, subject=None, body=None, business_id=None, from_email=None, **_
+            self,
+            to=None,
+            subject=None,
+            body=None,
+            business_id=None,
+            from_email=None,
+            **_
         ):
             sent.append(
                 {

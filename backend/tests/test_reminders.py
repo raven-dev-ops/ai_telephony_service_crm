@@ -171,7 +171,9 @@ def test_send_owner_summary_email(monkeypatch):
         calls["owner_email"] = owner_email
         return EmailResult(sent=True, provider="stub")
 
-    monkeypatch.setattr("app.routers.owner.email_service.notify_owner", fake_notify_owner)
+    monkeypatch.setattr(
+        "app.routers.owner.email_service.notify_owner", fake_notify_owner
+    )
 
     resp = client.post("/v1/reminders/owner-summary-email")
     assert resp.status_code == 200

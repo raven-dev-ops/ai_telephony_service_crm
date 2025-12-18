@@ -18,10 +18,16 @@ class FeedbackPayload(BaseModel):
     category: str | None = Field(default=None, description="bug, idea, support, other")
     summary: str = Field(..., description="Short summary or title")
     steps: str | None = Field(default=None, description="Steps to reproduce (optional)")
-    expected: str | None = Field(default=None, description="What you expected to happen")
+    expected: str | None = Field(
+        default=None, description="What you expected to happen"
+    )
     actual: str | None = Field(default=None, description="What actually happened")
-    call_sid: str | None = Field(default=None, description="Twilio CallSid if applicable")
-    contact: str | None = Field(default=None, description="Email or phone for follow-up")
+    call_sid: str | None = Field(
+        default=None, description="Twilio CallSid if applicable"
+    )
+    contact: str | None = Field(
+        default=None, description="Email or phone for follow-up"
+    )
     url: str | None = Field(default=None, description="Page URL where issue occurred")
 
 
@@ -56,7 +62,9 @@ async def submit_feedback(
 
 @router.get("/admin/feedback")
 def export_feedback(
-    business_id: str | None = Query(default=None, description="Filter by tenant business_id"),
+    business_id: str | None = Query(
+        default=None, description="Filter by tenant business_id"
+    ),
     since: str | None = Query(default=None, description="ISO datetime to filter from"),
     limit: int = Query(default=200, ge=1, le=1000),
     _: str = Depends(require_admin_auth),
@@ -67,7 +75,10 @@ def export_feedback(
         try:
             since_dt = datetime.fromisoformat(since)
         except Exception:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid 'since' timestamp")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid 'since' timestamp",
+            )
     rows = feedback_store.list(business_id=business_id, since=since_dt, limit=limit)
     content = json.dumps({"feedback": rows}, indent=2)
     return Response(content=content, media_type="application/json")

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Dict, Protocol
+from typing import Any, Dict, Protocol
 from uuid import uuid4
 import json
 import logging
@@ -8,10 +8,13 @@ import os
 
 from ..config import get_settings
 
+redis_module: Any | None
 try:  # Optional Redis dependency
-    import redis
+    import redis as _redis
 except Exception:  # pragma: no cover - redis is optional
-    redis = None
+    redis_module = None
+else:
+    redis_module = _redis
 
 
 @dataclass
@@ -99,7 +102,7 @@ class RedisSessionStore:
 
     def __init__(
         self,
-        client: "redis.Redis",
+        client: Any,
         key_prefix: str = "call_session",
         ttl_seconds: int = 3600,
     ) -> None:
@@ -221,7 +224,7 @@ def _create_session_store() -> SessionStore:
     if backend == "memory" and os.getenv("REDIS_URL"):
         backend = "redis"
     if backend == "redis":
-        if redis is None:
+        if redis_module is None:
             logging.getLogger(__name__).warning(
                 "session_store_backend_redis_unavailable_falling_back",
                 extra={"backend": backend},
@@ -229,7 +232,7 @@ def _create_session_store() -> SessionStore:
         else:
             try:
                 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-                client = redis.from_url(redis_url)
+                client = redis_module.from_url(redis_url)
                 return RedisSessionStore(client)
             except Exception:
                 logging.getLogger(__name__).warning(

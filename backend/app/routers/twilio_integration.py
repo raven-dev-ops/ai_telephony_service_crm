@@ -31,10 +31,8 @@ from ..services import (
     subscription as subscription_service,
 )
 from ..services.stt_tts import speech_service
-from ..services.calendar import calendar_service
 from ..services.sms import sms_service
-from ..services.email_service import email_service
-from ..business_config import get_calendar_id_for_business, get_language_for_business
+from ..business_config import get_language_for_business
 from ..services.twilio_state import PendingAction, twilio_state_store
 from . import owner as owner_routes
 
@@ -67,7 +65,9 @@ class TwilioStreamResponse(BaseModel):
 def _check_twilio_replay(event_id: str, window_seconds: int) -> None:
     """Basic replay protection for Twilio webhook event IDs."""
     now = time.time()
-    expired = [eid for eid, ts in _twilio_seen_events.items() if now - ts > window_seconds]
+    expired = [
+        eid for eid, ts in _twilio_seen_events.items() if now - ts > window_seconds
+    ]
     for eid in expired:
         _twilio_seen_events.pop(eid, None)
     if event_id in _twilio_seen_events:
@@ -143,10 +143,9 @@ async def _maybe_verify_twilio_signature(
         )
 
     # Optional timestamp guard to bound skew; when absent we skip the check.
-    ts_header = (
-        request.headers.get("X-Twilio-Request-Timestamp")
-        or request.headers.get("Twilio-Request-Timestamp")
-    )
+    ts_header = request.headers.get(
+        "X-Twilio-Request-Timestamp"
+    ) or request.headers.get("Twilio-Request-Timestamp")
     if ts_header:
         try:
             ts_val = int(float(ts_header))
@@ -268,9 +267,7 @@ def _format_appointment_time(appt) -> str:
     return when.strftime("%a %b %d at %I:%M %p UTC")
 
 
-def _ensure_sms_conversation(
-    business_id: str, from_phone: str
-) -> Conversation | None:
+def _ensure_sms_conversation(business_id: str, from_phone: str) -> Conversation | None:
     """Return or create the SMS conversation for a customer/phone."""
 
     link = twilio_state_store.get_sms_conversation(business_id, from_phone)
@@ -323,7 +320,9 @@ async def _maybe_alert_on_speech_circuit(
                 message=base_message,
                 subject="Speech provider degraded",
                 dedupe_key="speech_circuit_open",
-                send_email_copy=bool(owner_email and _email_alerts_enabled(business_row)),
+                send_email_copy=bool(
+                    owner_email and _email_alerts_enabled(business_row)
+                ),
             )
             alert_sent = result.delivered
         except Exception:
@@ -560,7 +559,9 @@ async def twilio_voice(
     if SpeechResult is not None:
         form_params["SpeechResult"] = SpeechResult
     await _maybe_verify_twilio_signature(request, form_params)
-    event_id = request.headers.get("X-Twilio-EventId") or request.headers.get("Twilio-Event-Id")
+    event_id = request.headers.get("X-Twilio-EventId") or request.headers.get(
+        "Twilio-Event-Id"
+    )
 
     try:
         # If the call has ended, we can clean up and optionally enqueue a callback
@@ -586,7 +587,11 @@ async def twilio_voice(
             if link and event_id and getattr(link, "last_event_id", None) == event_id:
                 logger.info(
                     "twilio_webhook_duplicate",
-                    extra={"call_sid": CallSid, "event_id": event_id, "status": CallStatus},
+                    extra={
+                        "call_sid": CallSid,
+                        "event_id": event_id,
+                        "status": CallStatus,
+                    },
                 )
                 return Response(content="<Response/>", media_type="text/xml")
             link = twilio_state_store.clear_call_session(CallSid)
@@ -639,14 +644,18 @@ async def twilio_voice(
             owner_message = f"{reason} from {phone} at {when_str}."
             if owner_phone or owner_email:
                 try:
-                    from ..services.owner_notifications import notify_owner_with_fallback
+                    from ..services.owner_notifications import (
+                        notify_owner_with_fallback,
+                    )
 
                     await notify_owner_with_fallback(
                         business_id=business_id,
                         message=owner_message,
                         subject="Missed call alert",
                         dedupe_key=f"missed_call_{phone}",
-                        send_email_copy=bool(owner_email and _email_alerts_enabled(business_row)),
+                        send_email_copy=bool(
+                            owner_email and _email_alerts_enabled(business_row)
+                        ),
                     )
                 except Exception:
                     logger.warning(
@@ -696,7 +705,11 @@ async def twilio_voice(
             if event_id and getattr(link, "last_event_id", None) == event_id:
                 logger.info(
                     "twilio_webhook_duplicate",
-                    extra={"call_sid": CallSid, "event_id": event_id, "status": CallStatus},
+                    extra={
+                        "call_sid": CallSid,
+                        "event_id": event_id,
+                        "status": CallStatus,
+                    },
                 )
                 return Response(content="<Response/>", media_type="text/xml")
             session = sessions.session_store.get(link.session_id)
@@ -708,7 +721,9 @@ async def twilio_voice(
                 lead_source=lead_source_param,
             )
             session_id = session.id
-            twilio_state_store.set_call_session(CallSid, session_id, state="active", event_id=event_id)
+            twilio_state_store.set_call_session(
+                CallSid, session_id, state="active", event_id=event_id
+            )
             # Create a conversation record for logging.
             customer = (
                 customers_repo.get_by_phone(From or "", business_id=business_id)
@@ -742,15 +757,15 @@ async def twilio_voice(
 
         if silent_turn and getattr(session, "no_input_count", 0) == 1:
             if language_code == "es":
-                prompt = (
-                    "No alcancAc a escucharte bien. Por favor di tu respuesta o marca 1 para sA- o 2 para no."
-                )
+                prompt = "No alcancAc a escucharte bien. Por favor di tu respuesta o marca 1 para sA- o 2 para no."
             else:
-                prompt = (
-                    "I'm having trouble hearing you. Please say your answer, or press 1 for yes or 2 for no."
-                )
+                prompt = "I'm having trouble hearing you. Please say your answer, or press 1 for yes or 2 for no."
             safe_reply = escape(prompt)
-            gather_action = f"/twilio/voice?business_id={business_id}" if business_id_param else "/twilio/voice"
+            gather_action = (
+                f"/twilio/voice?business_id={business_id}"
+                if business_id_param
+                else "/twilio/voice"
+            )
             twiml = f"""
   <Response>
     <Say voice="alice"{say_language_attr}>{safe_reply}</Say>
@@ -787,13 +802,9 @@ async def twilio_voice(
             session.stage = "COMPLETED"
             session.status = "PENDING_FOLLOWUP"
             if language_code == "es":
-                reply_text = (
-                    "Tengo problemas para escucharte. Te enviarAc al buzA3n de voz para que dejes tu nombre y direcciA3n."
-                )
+                reply_text = "Tengo problemas para escucharte. Te enviarAc al buzA3n de voz para que dejes tu nombre y direcciA3n."
             else:
-                reply_text = (
-                    "I'm having trouble hearing you. I'm sending you to voicemail so you can leave your name and address."
-                )
+                reply_text = "I'm having trouble hearing you. I'm sending you to voicemail so you can leave your name and address."
             safe_reply = escape(reply_text)
             allow_voicemail = getattr(get_settings().sms, "enable_voicemail", True)
             record_block = ""
@@ -1030,7 +1041,9 @@ async def twilio_owner_voice(
                         language_code=language_code,
                         business_name=business_name,
                     )
-                    from ..services.owner_notifications import notify_owner_with_fallback
+                    from ..services.owner_notifications import (
+                        notify_owner_with_fallback,
+                    )
 
                     await notify_owner_with_fallback(
                         business_id=business_id,
@@ -1312,15 +1325,15 @@ async def twilio_voice_assistant(
 
     if silent_turn and getattr(session, "no_input_count", 0) == 1:
         if language_code == "es":
-            reply_text = (
-                "No escuchA© tu respuesta. Por favor di tu respuesta o presiona 1 para sA- o 2 para no."
-            )
+            reply_text = "No escuchA© tu respuesta. Por favor di tu respuesta o presiona 1 para sA- o 2 para no."
         else:
-            reply_text = (
-                "I didn't catch that. Please say your answer, or press 1 for yes or 2 for no."
-            )
+            reply_text = "I didn't catch that. Please say your answer, or press 1 for yes or 2 for no."
         safe_reply = escape(reply_text)
-        gather_action = f"/twilio/voice-assistant?business_id={business_id}" if business_id_param else "/twilio/voice-assistant"
+        gather_action = (
+            f"/twilio/voice-assistant?business_id={business_id}"
+            if business_id_param
+            else "/twilio/voice-assistant"
+        )
         twiml = f"""
 <Response>
   <Say voice="alice"{say_language_attr}>{safe_reply}</Say>
@@ -1354,13 +1367,9 @@ async def twilio_voice_assistant(
         session.stage = "COMPLETED"
         session.status = "PENDING_FOLLOWUP"
         if language_code == "es":
-            reply_text = (
-                "Tengo problemas para escucharte. Te transferirAc para que dejes un breve buzA3n de voz con tu nombre y direcciA3n."
-            )
+            reply_text = "Tengo problemas para escucharte. Te transferirAc para que dejes un breve buzA3n de voz con tu nombre y direcciA3n."
         else:
-            reply_text = (
-                "I'm having trouble hearing you. I'm sending you to voicemail so you can leave your name and address."
-            )
+            reply_text = "I'm having trouble hearing you. I'm sending you to voicemail so you can leave your name and address."
         safe_reply = escape(reply_text)
         allow_voicemail = getattr(get_settings().sms, "enable_voicemail", True)
         record_block = ""
@@ -1397,7 +1406,9 @@ async def twilio_voice_assistant(
                 service = getattr(appt, "service_type", None) or "service"
                 body = f"New voice booking: {cust_name} on {when} ({service})."
                 try:
-                    from ..services.owner_notifications import notify_owner_with_fallback
+                    from ..services.owner_notifications import (
+                        notify_owner_with_fallback,
+                    )
 
                     await notify_owner_with_fallback(
                         business_id=business_id,
@@ -1556,7 +1567,9 @@ async def twilio_voice_stream(
             owner_message = f"{'Partial intake' if is_partial_lead else 'Missed call'} from {phone} at {now.strftime('%Y-%m-%d %H:%M UTC')}."
             if owner_phone or owner_email:
                 try:
-                    from ..services.owner_notifications import notify_owner_with_fallback
+                    from ..services.owner_notifications import (
+                        notify_owner_with_fallback,
+                    )
 
                     await notify_owner_with_fallback(
                         business_id=business_id,
@@ -1616,13 +1629,9 @@ async def twilio_voice_stream(
         session_obj.no_input_count = 0  # type: ignore[attr-defined]
     if silent_turn and getattr(session_obj, "no_input_count", 0) == 1:
         if language_code == "es":
-            prompt = (
-                "No alcanzo a escucharte bien. Por favor di tu respuesta o marca 1 para sí o 2 para no."
-            )
+            prompt = "No alcanzo a escucharte bien. Por favor di tu respuesta o marca 1 para sí o 2 para no."
         else:
-            prompt = (
-                "I'm having trouble hearing you. Please say your answer or press 1 for yes or 2 for no."
-            )
+            prompt = "I'm having trouble hearing you. Please say your answer or press 1 for yes or 2 for no."
         if conv:
             conversations_repo.append_message(conv.id, role="assistant", text=prompt)
         return TwilioStreamResponse(
@@ -1759,9 +1768,7 @@ async def twilio_sms(
         decline_keywords = {"no", "n"}
         cancel_intent_keywords = {"cancel", "cancel appointment", "cancel appt"}
         reschedule_keywords = {"reschedule", "change time", "change appointment"}
-        per_sms = metrics.sms_by_business.setdefault(
-            business_id, BusinessSmsMetrics()
-        )
+        per_sms = metrics.sms_by_business.setdefault(business_id, BusinessSmsMetrics())
         pending_action = twilio_state_store.get_pending_action(business_id, From)
 
         if normalized_body in opt_out_keywords:
@@ -1857,7 +1864,9 @@ async def twilio_sms(
                     )
                 else:
                     safe_reply = escape(
-                        "Thanks, noted." if language_code != "es" else "Gracias, anotado."
+                        "Thanks, noted."
+                        if language_code != "es"
+                        else "Gracias, anotado."
                     )
                 twilio_state_store.clear_pending_action(business_id, From)
                 twiml = f"""
@@ -1891,7 +1900,6 @@ async def twilio_sms(
 """.strip()
             return Response(content=twiml, media_type="text/xml")
 
-
         # Cancellation intent requires explicit confirmation.
         if normalized_body in cancel_intent_keywords:
             appt = _find_next_appointment_for_phone(From, business_id)
@@ -1901,7 +1909,7 @@ async def twilio_sms(
                     business_id,
                     From,
                     PendingAction(
-                        action='cancel',
+                        action="cancel",
                         appointment_id=appt.id,
                         business_id=business_id,
                         created_at=datetime.now(UTC),
@@ -1936,7 +1944,7 @@ async def twilio_sms(
                     business_id,
                     From,
                     PendingAction(
-                        action='reschedule',
+                        action="reschedule",
                         appointment_id=appt.id,
                         business_id=business_id,
                         created_at=datetime.now(UTC),
@@ -2080,7 +2088,9 @@ async def twilio_status_callback(request: Request) -> dict:
     """Capture Twilio delivery status callbacks for observability."""
     form_params = await request.form()
     await _maybe_verify_twilio_signature(request, form_params)
-    event_id = request.headers.get("X-Twilio-EventId") or request.headers.get("Twilio-Event-Id")
+    event_id = request.headers.get("X-Twilio-EventId") or request.headers.get(
+        "Twilio-Event-Id"
+    )
     message_sid = form_params.get("MessageSid")
     message_status = form_params.get("MessageStatus")
     to = form_params.get("To")
@@ -2090,9 +2100,14 @@ async def twilio_status_callback(request: Request) -> dict:
     if event_id:
         cache_key = f"status:{message_sid}"
         if twilio_state_store.get_call_session(cache_key):
-            logger.info("twilio_status_duplicate", extra={"event_id": event_id, "sid": message_sid})
+            logger.info(
+                "twilio_status_duplicate",
+                extra={"event_id": event_id, "sid": message_sid},
+            )
             return {"received": True, "status": message_status, "sid": message_sid}
-        twilio_state_store.set_call_session(cache_key, cache_key, state=message_status, event_id=event_id)
+        twilio_state_store.set_call_session(
+            cache_key, cache_key, state=message_status, event_id=event_id
+        )
     logger.info(
         "twilio_status_callback",
         extra={

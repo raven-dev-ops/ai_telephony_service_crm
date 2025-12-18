@@ -14,7 +14,7 @@ from app.repositories import customers_repo, appointments_repo
 from app.deps import DEFAULT_BUSINESS_ID
 from app.services import conversation
 from app.routers import twilio_integration
-from app.services import twilio_state, sessions
+from app.services import sessions
 from app.services.twilio_state import twilio_state_store
 from app.services.stt_tts import speech_service
 
@@ -648,6 +648,7 @@ def test_missed_call_respects_email_toggle(monkeypatch):
     assert resp.status_code == 200
     assert sms_calls, "owner SMS alert should be sent"
     assert not email_calls, "owner email alert should be suppressed when disabled"
+
 
 def test_twilio_voice_session_persists_across_turns():
     metrics.callbacks_by_business.clear()

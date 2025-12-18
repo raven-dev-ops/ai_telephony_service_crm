@@ -335,7 +335,9 @@ async def billing_webhook(
     raw_body = await request.body()
     settings = get_settings().stripe
     env = os.getenv("ENVIRONMENT", "dev").lower()
-    require_sig = bool(settings.verify_signatures or (env == "prod" and not settings.use_stub))
+    require_sig = bool(
+        settings.verify_signatures or (env == "prod" and not settings.use_stub)
+    )
     event_type = ""
     event_id = ""
     business_id = "default_business"
@@ -405,7 +407,12 @@ async def billing_webhook(
             else None
         )
 
-        if require_sig and not settings.use_stub and event_id and settings.replay_protection_seconds > 0:
+        if (
+            require_sig
+            and not settings.use_stub
+            and event_id
+            and settings.replay_protection_seconds > 0
+        ):
             check_replay(event_id, settings.replay_protection_seconds)
 
         if event_type == "checkout.session.completed":

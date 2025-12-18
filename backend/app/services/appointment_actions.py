@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Optional
+from typing import Any
 
 from ..business_config import get_calendar_id_for_business, get_language_for_business
 from ..repositories import appointments_repo, customers_repo, conversations_repo
 from ..services.calendar import TimeSlot, calendar_service
 from ..services.email_service import email_service
 from ..services.sms import sms_service
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -102,7 +105,11 @@ async def cancel_appointment(
                 business_id=business_id,
             )
         except Exception:
-            pass
+            logger.warning(
+                "calendar_delete_event_failed",
+                exc_info=True,
+                extra={"appointment_id": appointment_id, "business_id": business_id},
+            )
 
     job_stage = getattr(appt, "job_stage", None) or "Cancelled"
     appointments_repo.update(
@@ -174,7 +181,10 @@ async def reschedule_appointment(
         return ActionResult(code="invalid_range", message="Start must be before end")
 
     # Idempotent short-circuit when times are unchanged.
-    if getattr(appt, "start_time", None) == new_start and getattr(appt, "end_time", None) == new_end:
+    if (
+        getattr(appt, "start_time", None) == new_start
+        and getattr(appt, "end_time", None) == new_end
+    ):
         return ActionResult(
             code="no_change",
             message="Appointment already at requested time",
@@ -190,7 +200,9 @@ async def reschedule_appointment(
         address=address,
         is_emergency=is_emergency,
     ):
-        return ActionResult(code="conflict", message="Requested time conflicts with another booking")
+        return ActionResult(
+            code="conflict", message="Requested time conflicts with another booking"
+        )
 
     # Update calendar first to avoid duplicate bookings; fall back to stub/false gracefully.
     updated_event = True
@@ -213,7 +225,9 @@ async def reschedule_appointment(
         except Exception:
             updated_event = False
     if not updated_event:
-        return ActionResult(code="calendar_error", message="Calendar update failed; no changes applied")
+        return ActionResult(
+            code="calendar_error", message="Calendar update failed; no changes applied"
+        )
 
     updated = appointments_repo.update(
         appointment_id,
@@ -223,7 +237,9 @@ async def reschedule_appointment(
         job_stage="Rescheduled",
     )
     if not updated:
-        return ActionResult(code="not_found", message="Appointment not found after update")
+        return ActionResult(
+            code="not_found", message="Appointment not found after update"
+        )
 
     when_str = new_start.astimezone(UTC).strftime("%Y-%m-%d %H:%M %Z")
     language = get_language_for_business(business_id)

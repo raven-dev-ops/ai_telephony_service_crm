@@ -59,12 +59,20 @@ async def inbound_call(
 
     A real telephony provider (e.g., Twilio) would POST here when a call starts.
     """
+    graceful = not request.url.path.startswith("/v1/")
     state = getattr(request.state, "subscription_state", None)
     if state is None:
         state = await subscription_service.check_access(
-            business_id, feature="calls", upcoming_calls=1, graceful=True
+            business_id, feature="calls", upcoming_calls=1, graceful=graceful
         )
     if state.blocked:
+        if not graceful:
+            raise HTTPException(
+                status_code=402,
+                detail=state.message
+                or "Subscription inactive. Calls will be routed to voicemail and automation is paused.",
+                headers={"X-Subscription-Status": state.status},
+            )
         msg = state.message or "Subscription inactive. Calls are routed to voicemail."
         voice = get_voice_for_business(business_id)
         try:

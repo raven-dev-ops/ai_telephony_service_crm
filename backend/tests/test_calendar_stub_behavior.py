@@ -107,8 +107,8 @@ def test_get_business_capacity_reads_business_fields() -> None:
     finally:
         session.close()
 
-    max_jobs, reserve_mornings, travel_buffer, service_durations = _get_business_capacity(
-        "calendar_capacity_test"
+    max_jobs, reserve_mornings, travel_buffer, service_durations = (
+        _get_business_capacity("calendar_capacity_test")
     )
     assert max_jobs == 3
     assert reserve_mornings is True

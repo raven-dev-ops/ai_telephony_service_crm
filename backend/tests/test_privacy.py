@@ -1,5 +1,3 @@
-import os
-
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -9,7 +7,6 @@ from app.repositories import (
     conversations_repo,
 )
 from app.deps import DEFAULT_BUSINESS_ID
-from app.models import ConversationMessage
 
 
 client = TestClient(app)
@@ -44,7 +41,7 @@ def test_privacy_export_and_delete_flow(monkeypatch):
         address="123 Main St",
         business_id=DEFAULT_BUSINESS_ID,
     )
-    appt = appointments_repo.create(
+    appointments_repo.create(
         customer_id=cust.id,
         start_time=None,
         end_time=None,

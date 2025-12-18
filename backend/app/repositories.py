@@ -329,13 +329,18 @@ class InMemoryConversationRepository:
         return [c for c in self._by_id.values() if c.customer_id == customer_id]
 
     def delete_for_customer(self, customer_id: str) -> None:
-        """Delete all conversations and messages for a customer."""
+        """Delete all conversations for a customer."""
         for conv_id, conv in list(self._by_id.items()):
             if conv.customer_id == customer_id:
                 self._by_id.pop(conv_id, None)
                 if conv.session_id:
                     self._by_session.pop(conv.session_id, None)
-                # No separate messages store in memory; messages are on the conversation.
+                if conv.business_id in self._by_business:
+                    self._by_business[conv.business_id] = [
+                        cid
+                        for cid in self._by_business[conv.business_id]
+                        if cid != conv_id
+                    ]
 
     def append_message(self, conversation_id: str, role: str, text: str) -> None:
         conv = self._by_id.get(conversation_id)
@@ -362,20 +367,6 @@ class InMemoryConversationRepository:
         ids = self._by_business.get(business_id, [])
         return [self._by_id[i] for i in ids]
 
-    def list_for_customer(self, customer_id: str) -> List[Conversation]:
-        return [c for c in self._by_id.values() if c.customer_id == customer_id]
-
-    def delete_for_customer(self, customer_id: str) -> None:
-        """Delete all conversations for a customer."""
-        for conv_id, conv in list(self._by_id.items()):
-            if conv.customer_id == customer_id:
-                self._by_id.pop(conv_id, None)
-                if conv.session_id:
-                    self._by_session.pop(conv.session_id, None)
-                if conv.business_id in self._by_business:
-                    self._by_business[conv.business_id] = [
-                        cid for cid in self._by_business[conv.business_id] if cid != conv_id
-                    ]
 
 class DbCustomerRepository:
     """Customer repository backed by the SQLAlchemy database.

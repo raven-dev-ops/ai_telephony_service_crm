@@ -21,7 +21,7 @@ def test_widget_token_expiry_and_last_used_tracking() -> None:
     _require_db()
     settings = main.get_settings()
     settings.require_business_api_key = False
-    app = main.create_app()
+    main.create_app()
 
     session = SessionLocal()
     try:

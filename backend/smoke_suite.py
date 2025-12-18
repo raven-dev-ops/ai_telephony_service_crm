@@ -108,7 +108,9 @@ async def scenario_emergency_flow() -> str:
     await manager.handle_input(session, None)  # greeting
     await manager.handle_input(session, "Alex")  # name
     await manager.handle_input(session, "789 Oak St, KC MO")  # address
-    res = await manager.handle_input(session, "Basement is flooding and sewage backing up")
+    res = await manager.handle_input(
+        session, "Basement is flooding and sewage backing up"
+    )
     assert res.new_state["is_emergency"] is True
     await manager.handle_input(session, "yes")  # accept scheduling
     res = await manager.handle_input(session, "yes")  # confirm slot

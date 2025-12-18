@@ -437,9 +437,7 @@ async def create_appointment(
     customer = customers_repo.get(payload.customer_id)
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
-    actual_minutes = int(
-        (payload.end_time - payload.start_time).total_seconds() // 60
-    )
+    actual_minutes = int((payload.end_time - payload.start_time).total_seconds() // 60)
     expected_minutes = calendar_service.resolve_duration_minutes(
         business_id, payload.service_type, actual_minutes
     )
@@ -448,15 +446,8 @@ async def create_appointment(
             status_code=400,
             detail=f"Service type {payload.service_type} requires duration {expected_minutes} minutes.",
         )
-    if calendar_service.has_conflict(
-        business_id=business_id,
-        start=payload.start_time,
-        end=payload.end_time,
-        technician_id=payload.technician_id,
-        is_emergency=payload.is_emergency,
-        address=getattr(customer, "address", None),
-    ):
-        raise HTTPException(status_code=409, detail="Requested time slot is unavailable")
+    if payload.start_time >= payload.end_time:
+        raise HTTPException(status_code=400, detail="Start time must precede end time")
     appt = appointments_repo.create(
         customer_id=payload.customer_id,
         start_time=payload.start_time,
@@ -641,8 +632,16 @@ async def update_appointment(
             technician_id=technician_id,
             address=getattr(customer, "address", None) if customer else None,
             is_emergency=payload.is_emergency or appt.is_emergency,
-            service_type=payload.service_type if payload.service_type is not None else appt.service_type,
-            description=payload.description if payload.description is not None else appt.description,
+            service_type=(
+                payload.service_type
+                if payload.service_type is not None
+                else appt.service_type
+            ),
+            description=(
+                payload.description
+                if payload.description is not None
+                else appt.description
+            ),
         )
         if result.code == "conflict":
             raise HTTPException(
@@ -650,7 +649,9 @@ async def update_appointment(
                 detail="Requested time slot is unavailable",
             )
         if result.code == "invalid_range":
-            raise HTTPException(status_code=400, detail="Start time must precede end time")
+            raise HTTPException(
+                status_code=400, detail="Start time must precede end time"
+            )
         if result.code not in {"rescheduled", "no_change"}:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

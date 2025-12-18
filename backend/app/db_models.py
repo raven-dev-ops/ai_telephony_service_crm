@@ -42,7 +42,7 @@ if SQLALCHEMY_AVAILABLE:
         language_code = Column(String, nullable=True)  # type: ignore[call-arg]
         max_jobs_per_day = Column(Integer, nullable=True)  # type: ignore[call-arg]
         reserve_mornings_for_emergencies = Column(
-            Boolean, default=True, nullable=False
+            Boolean, default=False, nullable=False
         )  # type: ignore[call-arg]
         travel_buffer_minutes = Column(Integer, nullable=True)  # type: ignore[call-arg]
         twilio_missed_statuses = Column(String, nullable=True)  # type: ignore[call-arg]

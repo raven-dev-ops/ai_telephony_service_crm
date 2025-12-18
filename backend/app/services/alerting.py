@@ -56,9 +56,7 @@ def _record_alert(key: str, detail: str, severity: str, runbook: str) -> None:
     metrics.alert_last_fired[key] = now.isoformat()
     webhook = os.getenv("ONCALL_WEBHOOK_URL")
     if webhook:
-        payload = {
-            "text": f"[{severity}] {key}: {detail} | runbook={runbook or 'n/a'}"
-        }
+        payload = {"text": f"[{severity}] {key}: {detail} | runbook={runbook or 'n/a'}"}
         try:
             httpx.post(webhook, json=payload, timeout=3.0)
         except Exception:

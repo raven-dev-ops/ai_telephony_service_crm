@@ -81,7 +81,7 @@ async def get_business_id(
                 )
                 if business is not None:
                     try:
-                        business.api_key_last_used_at = now  # type: ignore[attr-defined]
+                        business.api_key_last_used_at = now  # type: ignore[assignment]
                         session.add(business)
                         session.commit()
                     except Exception:
@@ -102,7 +102,7 @@ async def get_business_id(
                             detail="Widget token expired",
                         )
                     try:
-                        business.widget_token_last_used_at = now  # type: ignore[attr-defined]
+                        business.widget_token_last_used_at = now  # type: ignore[assignment]
                         session.add(business)
                         session.commit()
                     except HTTPException:
@@ -236,7 +236,9 @@ async def require_subscription_active(
     feature = "core"
     graceful = False
     upcoming_calls = 0
-    if path.startswith(("/telephony", "/v1/telephony", "/twilio", "/v1/twilio", "/v1/voice")):
+    if path.startswith(
+        ("/telephony", "/v1/telephony", "/twilio", "/v1/twilio", "/v1/voice")
+    ):
         feature = "calls"
         graceful = True
         upcoming_calls = 1

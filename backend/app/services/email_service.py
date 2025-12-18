@@ -115,7 +115,9 @@ class EmailService:
     async def _refresh_token_if_needed(
         self, business_id: str, client_id: str | None, client_secret: str | None
     ):
-        tok = oauth_store.get_tokens("gmail", business_id) or self._load_gmail_tokens_from_db(business_id)
+        tok = self._load_gmail_tokens_from_db(business_id) or oauth_store.get_tokens(
+            "gmail", business_id
+        )
         if not tok:
             return None
         now = time.time()

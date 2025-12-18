@@ -525,7 +525,11 @@ class ConversationManager:
 
         # Score emergency signals deterministically.
         emergency_conf, reasons = _score_emergency_signal(
-            normalized, normalized_intent_label, session.intent_confidence, emergency_keywords, getattr(session, "emergency_confidence", 0.0)
+            normalized,
+            normalized_intent_label,
+            session.intent_confidence,
+            emergency_keywords,
+            getattr(session, "emergency_confidence", 0.0),
         )
         if reasons:
             existing = getattr(session, "emergency_reasons", [])
@@ -558,7 +562,9 @@ class ConversationManager:
                     f"It sounds like this might be an emergency ({reason_text}). "
                     "Is this an emergency? Please reply YES or NO."
                 )
-            return ConversationResult(reply_text=prompt, new_state=_session_state(session))
+            return ConversationResult(
+                reply_text=prompt, new_state=_session_state(session)
+            )
 
         guardrail_action_stages = {"ASK_SCHEDULE", "CONFIRM_SLOT"}
         if normalized and session.stage != "COMPLETED":
@@ -819,13 +825,9 @@ class ConversationManager:
             if not session.address:
                 session.stage = "ASK_ADDRESS"
                 if language_code == "es":
-                    reply = (
-                        "Antes de buscar horarios, necesito la direcciA3n completa del servicio."
-                    )
+                    reply = "Antes de buscar horarios, necesito la direcciA3n completa del servicio."
                 else:
-                    reply = (
-                        "Before I look for times, I need the full service address for this visit."
-                    )
+                    reply = "Before I look for times, I need the full service address for this visit."
                 return ConversationResult(
                     reply_text=reply, new_state=_session_state(session)
                 )
@@ -1048,7 +1050,9 @@ class ConversationManager:
             from .owner_notifications import notify_owner_with_fallback
 
             subject = (
-                "Emergency booking" if session.is_emergency else "New appointment booked"
+                "Emergency booking"
+                if session.is_emergency
+                else "New appointment booked"
             )
             await notify_owner_with_fallback(
                 business_id=business_id,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+import logging
 from pathlib import Path
 from typing import List, Optional
 import httpx
@@ -33,6 +34,8 @@ from ..config import get_settings
 from ..db import SQLALCHEMY_AVAILABLE, SessionLocal
 from ..db_models import BusinessDB
 from ..services.oauth_tokens import oauth_store, OAuthToken
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -258,7 +261,11 @@ def _refresh_gcal_tokens(business_id: str, settings) -> OAuthToken | None:
                     business_id, access_token, refresh_token, expires_in
                 )
         except Exception:
-            pass
+            logger.warning(
+                "gcal_token_refresh_failed",
+                exc_info=True,
+                extra={"business_id": business_id},
+            )
     return _save_gcal_tokens(
         business_id,
         access_token=f"gcalendar_access_{int(datetime.now(UTC).timestamp())}",

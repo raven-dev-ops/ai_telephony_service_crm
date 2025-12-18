@@ -1911,6 +1911,7 @@ async def owner_onboarding_test_call(
         ),
     )
 
+
 class OwnerOnboardingUpdateRequest(BaseModel):
     owner_name: str | None = None
     owner_email: EmailStr | None = None

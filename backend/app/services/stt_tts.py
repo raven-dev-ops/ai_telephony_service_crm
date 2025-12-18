@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import base64
 from abc import ABC, abstractmethod
+import logging
 import time
 from typing import Any
 
 import httpx
 
 from ..config import SpeechSettings, get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class SpeechProvider(ABC):
@@ -106,7 +109,11 @@ class OpenAISpeechProvider(SpeechProvider):
     async def healthcheck(self) -> dict[str, Any]:
         """Lightweight provider health check."""
         if not self._settings.openai_api_key:
-            return {"healthy": False, "provider": self.name, "reason": "missing_api_key"}
+            return {
+                "healthy": False,
+                "provider": self.name,
+                "reason": "missing_api_key",
+            }
         url = f"{self._settings.openai_api_base}/models"
         headers = {"Authorization": f"Bearer {self._settings.openai_api_key}"}
         try:
@@ -166,8 +173,12 @@ class SpeechService:
         # For now, the fallback is always stub to preserve deterministic flows.
         return StubSpeechProvider()
 
-    def _record_error(self, provider_name: str, action: str, exc: Exception | None) -> None:
-        self._last_error = f"{provider_name}:{action}:{exc}" if exc else f"{provider_name}:{action}"
+    def _record_error(
+        self, provider_name: str, action: str, exc: Exception | None
+    ) -> None:
+        self._last_error = (
+            f"{provider_name}:{action}:{exc}" if exc else f"{provider_name}:{action}"
+        )
         self._last_provider = provider_name
         self._last_used_fallback = False
 
@@ -188,7 +199,11 @@ class SpeechService:
                 try:
                     return await fallback.transcribe(audio)
                 except Exception:
-                    pass
+                    logger.warning(
+                        "speech_fallback_transcribe_failed",
+                        exc_info=True,
+                        extra={"provider": provider.name, "fallback": fallback.name},
+                    )
             self._trip_circuit()
             return ""
 
@@ -209,7 +224,11 @@ class SpeechService:
                 try:
                     return await fallback.synthesize(text, voice=voice)
                 except Exception:
-                    pass
+                    logger.warning(
+                        "speech_fallback_synthesize_failed",
+                        exc_info=True,
+                        extra={"provider": provider.name, "fallback": fallback.name},
+                    )
             self._trip_circuit()
             return "audio://placeholder"
 
@@ -218,11 +237,15 @@ class SpeechService:
         provider = self._select_provider()
         if hasattr(provider, "healthcheck"):
             try:
-                result = await provider.healthcheck()  # type: ignore[attr-defined]
+                result = await provider.healthcheck()
                 result.setdefault("provider", provider.name)
                 return result
             except Exception:
-                return {"healthy": False, "provider": provider.name, "reason": "healthcheck_error"}
+                return {
+                    "healthy": False,
+                    "provider": provider.name,
+                    "reason": "healthcheck_error",
+                }
         return {"healthy": True, "provider": provider.name}
 
     def diagnostics(self) -> dict[str, Any]:

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 from dataclasses import dataclass, asdict
-from datetime import UTC, datetime
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -35,28 +38,31 @@ class FeedbackStore:
             try:
                 with open(self._path, "r", encoding="utf-8") as f:
                     for line in f:
-                        try:
-                            obj = json.loads(line)
-                            self._entries.append(
-                                FeedbackEntry(
-                                    created_at=datetime.fromisoformat(obj.get("created_at")),
-                                    business_id=obj.get("business_id") or "unknown",
-                                    category=obj.get("category"),
-                                    summary=obj.get("summary") or "",
-                                    steps=obj.get("steps"),
-                                    expected=obj.get("expected"),
-                                    actual=obj.get("actual"),
-                                    call_sid=obj.get("call_sid"),
-                                    contact=obj.get("contact"),
-                                    url=obj.get("url"),
-                                    user_agent=obj.get("user_agent"),
-                                )
-                            )
-                        except Exception:
-                            continue
+                        entry = self._parse_line(line)
+                        if entry is not None:
+                            self._entries.append(entry)
             except Exception:
                 # Ignore load failures to avoid blocking requests.
                 self._entries = []
+
+    def _parse_line(self, line: str) -> FeedbackEntry | None:
+        try:
+            obj = json.loads(line)
+            return FeedbackEntry(
+                created_at=datetime.fromisoformat(obj.get("created_at")),
+                business_id=obj.get("business_id") or "unknown",
+                category=obj.get("category"),
+                summary=obj.get("summary") or "",
+                steps=obj.get("steps"),
+                expected=obj.get("expected"),
+                actual=obj.get("actual"),
+                call_sid=obj.get("call_sid"),
+                contact=obj.get("contact"),
+                url=obj.get("url"),
+                user_agent=obj.get("user_agent"),
+            )
+        except Exception:
+            return None
 
     def append(self, entry: FeedbackEntry) -> None:
         with self._lock:
@@ -68,7 +74,11 @@ class FeedbackStore:
                     f.write(json.dumps(serializable) + "\n")
             except Exception:
                 # Persistence failures are logged by caller if needed; do not raise.
-                pass
+                logger.warning(
+                    "feedback_persist_failed",
+                    exc_info=True,
+                    extra={"path": self._path, "business_id": entry.business_id},
+                )
 
     def list(
         self,

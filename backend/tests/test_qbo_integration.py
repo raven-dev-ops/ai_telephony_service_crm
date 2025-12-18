@@ -119,7 +119,9 @@ def test_qbo_sync_real_flow_with_mocks(monkeypatch):
 
         def post(self, url, data=None, auth=None):
             # Token exchange
-            return DummyResp(body={"access_token": "a", "refresh_token": "r", "expires_in": 3600})
+            return DummyResp(
+                body={"access_token": "a", "refresh_token": "r", "expires_in": 3600}
+            )
 
     monkeypatch.setattr(
         qbo_integration, "httpx", type("X", (), {"Client": DummyClient})
@@ -190,7 +192,9 @@ def test_qbo_refresh_uses_live_tokens(monkeypatch):
             return DummyResp(body={"SalesReceipt": {"Id": "2"}})
 
     monkeypatch.setattr(qbo_integration, "get_settings", lambda: Settings())
-    monkeypatch.setattr(qbo_integration, "httpx", type("X", (), {"Client": DummyClient}))
+    monkeypatch.setattr(
+        qbo_integration, "httpx", type("X", (), {"Client": DummyClient})
+    )
 
     session = SessionLocal()
     try:
@@ -282,7 +286,9 @@ def test_qbo_callback_failure_when_configured(monkeypatch):
             return DummyResp()
 
     monkeypatch.setattr(qbo_integration, "get_settings", lambda: Settings())
-    monkeypatch.setattr(qbo_integration, "httpx", type("X", (), {"Client": DummyClient}))
+    monkeypatch.setattr(
+        qbo_integration, "httpx", type("X", (), {"Client": DummyClient})
+    )
 
     resp = client.get(
         "/v1/integrations/qbo/callback",

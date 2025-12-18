@@ -43,7 +43,7 @@ from .routers import (
     telephony,
     twilio_integration,
     voice,
-    )
+)
 
 
 def _is_business_locked(business_id: str) -> bool:
@@ -51,6 +51,7 @@ def _is_business_locked(business_id: str) -> bool:
     if not (SQLALCHEMY_AVAILABLE and SessionLocal is not None):
         return False
     from .db_models import BusinessDB  # local import to avoid circular deps
+
     session_db = SessionLocal()
     try:
         row = session_db.get(BusinessDB, business_id)
@@ -309,11 +310,12 @@ def create_app() -> FastAPI:
                     metrics.total_errors += 1
                     route_metrics.error_count += 1
                     metrics.rate_limit_blocks_total += 1
-                    metrics.rate_limit_blocks_by_business[
-                        business_id or "unknown"
-                    ] = metrics.rate_limit_blocks_by_business.get(
-                        business_id or "unknown", 0
-                    ) + 1
+                    metrics.rate_limit_blocks_by_business[business_id or "unknown"] = (
+                        metrics.rate_limit_blocks_by_business.get(
+                            business_id or "unknown", 0
+                        )
+                        + 1
+                    )
                     metrics.rate_limit_blocks_by_ip[client_ip] = (
                         metrics.rate_limit_blocks_by_ip.get(client_ip, 0) + 1
                     )
@@ -335,16 +337,20 @@ def create_app() -> FastAPI:
                 await record_audit_event(request, exc.status_code)
                 response = await http_exception_handler(request, exc)
                 error_recorded = True
-            except Exception:
+            except Exception as exc:
                 metrics.total_errors += 1
                 route_metrics.error_count += 1
                 await record_audit_event(request, 500)
                 logger.exception(
                     "unhandled_request_exception", exc_info=True, extra={"path": path}
                 )
-                response = Response(
-                    status_code=500, content="Internal Server Error"
+                testing_mode = (
+                    os.getenv("TESTING", "false").lower() == "true"
+                    or os.getenv("PYTEST_CURRENT_TEST") is not None
                 )
+                if testing_mode:
+                    raise exc
+                response = Response(status_code=500, content="Internal Server Error")
                 error_recorded = True
             latency_ms = (time.time() - start) * 1000.0
             route_metrics.total_latency_ms += latency_ms
@@ -356,7 +362,10 @@ def create_app() -> FastAPI:
             # Successful or handled responses are also audited.
             if not error_recorded:
                 await record_audit_event(request, response.status_code)
-            if path.startswith(("/twilio", "/v1/twilio")) and response.status_code >= 400:
+            if (
+                path.startswith(("/twilio", "/v1/twilio"))
+                and response.status_code >= 400
+            ):
                 metrics.twilio_webhook_failures += 1
                 if response.status_code >= 500:
                     alerting.maybe_trigger_alert(

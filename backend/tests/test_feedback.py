@@ -1,4 +1,3 @@
-import os
 import tempfile
 from datetime import UTC, datetime
 
@@ -20,7 +19,12 @@ def test_submit_feedback_records_entry(monkeypatch):
 
     resp = client.post(
         "/v1/feedback",
-        json={"summary": "Beta bug", "category": "bug", "expected": "works", "actual": "fails"},
+        json={
+            "summary": "Beta bug",
+            "category": "bug",
+            "expected": "works",
+            "actual": "fails",
+        },
     )
     assert resp.status_code == 200
     body = resp.json()

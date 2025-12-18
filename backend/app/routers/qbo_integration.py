@@ -143,18 +143,14 @@ def _refresh_tokens(business_id: str) -> None:
                         "body": resp.text,
                     },
                 )
-                raise HTTPException(
-                    status_code=502, detail="QuickBooks refresh failed"
-                )
+                raise HTTPException(status_code=502, detail="QuickBooks refresh failed")
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.warning(
                     "qbo_refresh_exception",
                     exc_info=True,
                     extra={"business_id": business_id, "error": str(exc)},
                 )
-                raise HTTPException(
-                    status_code=502, detail="QuickBooks refresh failed"
-                )
+                raise HTTPException(status_code=502, detail="QuickBooks refresh failed")
 
         # Fallback stub refresh path only when not configured for live.
         new_access = f"access_{int(datetime.now(UTC).timestamp())}"

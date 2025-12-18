@@ -172,11 +172,18 @@ async def send_owner_today_summary_email(
         from . import owner as owner_routes  # local import to avoid cycles
 
         result = await owner_routes.today_summary_email(business_id=business_id)
-        return EmailResult(sent=result.sent, detail=result.detail, provider=result.provider)
+        return EmailResult(
+            sent=result.sent, detail=result.detail, provider=result.provider
+        )
 
     if background:
         job_queue.enqueue(lambda: asyncio.run(_run()))
         return {"queued": True, "sent": False}
 
     result = await _run()
-    return {"queued": False, "sent": result.sent, "provider": result.provider, "detail": result.detail}
+    return {
+        "queued": False,
+        "sent": result.sent,
+        "provider": result.provider,
+        "detail": result.detail,
+    }

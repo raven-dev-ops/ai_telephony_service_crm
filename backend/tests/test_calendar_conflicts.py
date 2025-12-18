@@ -98,8 +98,11 @@ def test_has_conflict_blocks_closed_days_and_hours():
     )
 
     ok_start = datetime(2025, 1, 6, 9, 0, tzinfo=UTC)
-    assert calendar_service.has_conflict(
-        business_id=DEFAULT_BUSINESS_ID,
-        start=ok_start,
-        end=ok_start + timedelta(hours=1),
-    ) is False
+    assert (
+        calendar_service.has_conflict(
+            business_id=DEFAULT_BUSINESS_ID,
+            start=ok_start,
+            end=ok_start + timedelta(hours=1),
+        )
+        is False
+    )

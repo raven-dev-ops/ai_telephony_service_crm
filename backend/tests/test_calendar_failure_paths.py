@@ -29,8 +29,8 @@ def test_parse_closed_days_and_invalid_hours(monkeypatch):
     assert open_hour == 18 and close_hour == 8
     assert closed_days == set()
 
-    max_jobs, reserve_mornings, buffer_minutes, service_durations = calendar_mod._get_business_capacity(
-        business_id=None
+    max_jobs, reserve_mornings, buffer_minutes, service_durations = (
+        calendar_mod._get_business_capacity(business_id=None)
     )
     assert max_jobs is None
     assert reserve_mornings is False
@@ -54,8 +54,8 @@ def test_get_business_capacity_handles_invalid_values(monkeypatch):
     monkeypatch.setattr(calendar_mod, "SQLALCHEMY_AVAILABLE", True)
     monkeypatch.setattr(calendar_mod, "SessionLocal", lambda: DummySession())
 
-    max_jobs, reserve_mornings, buffer_minutes, service_durations = calendar_mod._get_business_capacity(
-        "biz-capacity"
+    max_jobs, reserve_mornings, buffer_minutes, service_durations = (
+        calendar_mod._get_business_capacity("biz-capacity")
     )
     assert max_jobs is None
     assert reserve_mornings is True  # truthy string coerces to bool

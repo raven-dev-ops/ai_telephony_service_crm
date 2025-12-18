@@ -100,6 +100,8 @@ def _reset_default_business(session) -> None:
         row.widget_token_last_rotated_at = None
         row.widget_token_expires_at = None
         row.service_tier = None
+        row.closed_days = None
+        row.reserve_mornings_for_emergencies = False
         row.tts_voice = None
         row.terms_accepted_at = None
         row.privacy_accepted_at = None
@@ -514,6 +516,7 @@ def init_db() -> None:
                     widget_token=default_widget_token,
                     widget_token_last_rotated_at=now,
                     widget_token_expires_at=widget_expires_at,
+                    reserve_mornings_for_emergencies=False,
                 )
             )
             session.commit()

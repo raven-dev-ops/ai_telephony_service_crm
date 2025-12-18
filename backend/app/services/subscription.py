@@ -227,11 +227,12 @@ async def check_access(
     # Even when enforcement is disabled, send reminders for non-active states and renewals.
     if not getattr(settings, "enforce_subscription", False):
         if state.status not in {"active", "trialing"}:
-            state.message = state.message or "Subscription inactive; update billing to avoid suspension."
+            state.message = (
+                state.message
+                or "Subscription inactive; update billing to avoid suspension."
+            )
             if state.in_grace and state.grace_remaining_days:
-                state.message = (
-                    f"Payment past due. Grace ends in {state.grace_remaining_days} day(s)."
-                )
+                state.message = f"Payment past due. Grace ends in {state.grace_remaining_days} day(s)."
             if SQLALCHEMY_AVAILABLE and SessionLocal is not None:
                 session = SessionLocal()
                 try:
@@ -241,7 +242,10 @@ async def check_access(
                 await _notify_owner_if_needed(business, state)
         else:
             expiring_window = timedelta(days=_grace_days())
-            if state.current_period_end and state.current_period_end <= datetime.now(UTC) + expiring_window:
+            if (
+                state.current_period_end
+                and state.current_period_end <= datetime.now(UTC) + expiring_window
+            ):
                 if SQLALCHEMY_AVAILABLE and SessionLocal is not None:
                     session = SessionLocal()
                     try:

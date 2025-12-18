@@ -4,7 +4,6 @@ import hmac
 import json
 import time
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app import config, deps
@@ -27,7 +26,9 @@ def _setup_twilio_env(monkeypatch) -> str:
 
 def _twilio_signature(url: str, params: dict[str, str], token: str) -> str:
     data = url + "".join(f"{k}{params[k]}" for k in sorted(params.keys()))
-    digest = hmac.new(token.encode("utf-8"), data.encode("utf-8"), hashlib.sha1).digest()
+    digest = hmac.new(
+        token.encode("utf-8"), data.encode("utf-8"), hashlib.sha1
+    ).digest()
     return base64.b64encode(digest).decode("utf-8")
 
 
@@ -114,7 +115,13 @@ def test_twilio_replay_event_blocked(monkeypatch):
 
 def test_stripe_missing_signature_rejected(monkeypatch):
     _setup_stripe_env(monkeypatch)
-    payload = json.dumps({"id": "evt_missing", "type": "unknown.event", "data": {"object": {"metadata": {"business_id": "default_business"}}}})
+    payload = json.dumps(
+        {
+            "id": "evt_missing",
+            "type": "unknown.event",
+            "data": {"object": {"metadata": {"business_id": "default_business"}}},
+        }
+    )
     resp = client.post(
         "/v1/billing/webhook",
         data=payload,
@@ -124,8 +131,14 @@ def test_stripe_missing_signature_rejected(monkeypatch):
 
 
 def test_stripe_invalid_signature_rejected(monkeypatch):
-    secret = _setup_stripe_env(monkeypatch)
-    payload = json.dumps({"id": "evt_invalid", "type": "unknown.event", "data": {"object": {"metadata": {"business_id": "default_business"}}}})
+    _setup_stripe_env(monkeypatch)
+    payload = json.dumps(
+        {
+            "id": "evt_invalid",
+            "type": "unknown.event",
+            "data": {"object": {"metadata": {"business_id": "default_business"}}},
+        }
+    )
     ts = int(time.time())
     sig_header = f"t={ts},v1=badsignature"
     resp = client.post(
@@ -138,7 +151,13 @@ def test_stripe_invalid_signature_rejected(monkeypatch):
 
 def test_stripe_replay_rejected(monkeypatch):
     secret = _setup_stripe_env(monkeypatch)
-    payload = json.dumps({"id": "evt_replay", "type": "unknown.event", "data": {"object": {"metadata": {"business_id": "default_business"}}}})
+    payload = json.dumps(
+        {
+            "id": "evt_replay",
+            "type": "unknown.event",
+            "data": {"object": {"metadata": {"business_id": "default_business"}}},
+        }
+    )
     sig_header = _stripe_signature(payload, secret)
     headers = {"Content-Type": "application/json", "Stripe-Signature": sig_header}
 
