@@ -2,20 +2,43 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Generator
-from datetime import datetime, UTC, timedelta
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Generator
 
-try:
+if TYPE_CHECKING:
     from sqlalchemy import create_engine
-    from sqlalchemy.orm import Session, declarative_base, sessionmaker
+    from sqlalchemy.engine import Engine
+    from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
     SQLALCHEMY_AVAILABLE = True
-except Exception:  # pragma: no cover - optional dependency
-    create_engine = None  # type: ignore[assignment]
-    sessionmaker = None  # type: ignore[assignment]
-    declarative_base = None  # type: ignore[assignment]
-    Session = object  # type: ignore[assignment]
-    SQLALCHEMY_AVAILABLE = False
+
+    class Base(DeclarativeBase):
+        def __init__(self, **kwargs: object) -> None:
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
+else:
+    try:
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import DeclarativeBase, sessionmaker
+    except Exception:  # pragma: no cover - optional dependency
+        SQLALCHEMY_AVAILABLE = False
+        create_engine = None
+        sessionmaker = None
+
+        # Lightweight stubs so the module can be imported in minimal environments.
+        class Base:  # pragma: no cover
+            metadata = type(
+                "Meta", (), {"create_all": staticmethod(lambda bind=None: None)}
+            )
+
+    else:
+        SQLALCHEMY_AVAILABLE = True
+
+        class Base(DeclarativeBase):
+            def __init__(self, **kwargs: object) -> None:
+                for key, value in kwargs.items():
+                    setattr(self, key, value)
 
 
 def _build_database_url() -> str:
@@ -42,23 +65,18 @@ def _build_database_url() -> str:
 
 DATABASE_URL = _build_database_url()
 
+engine: Engine | None
+SessionLocal: sessionmaker[Session] | None
+
 if SQLALCHEMY_AVAILABLE:
     connect_args = (
         {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
     )
     engine = create_engine(DATABASE_URL, connect_args=connect_args)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    Base = declarative_base()
 else:
     engine = None
     SessionLocal = None
-
-    class _BaseStub:
-        metadata = type(
-            "Meta", (), {"create_all": staticmethod(lambda bind=None: None)}
-        )
-
-    Base = _BaseStub  # type: ignore[assignment]
 
 
 def get_db() -> Generator["Session", None, None]:
@@ -139,7 +157,7 @@ def init_db() -> None:
                     WHERE table_name='businesses'
                 """
                 )
-                cols = {row[0] for row in result}
+                cols = {str(row[0]) for row in result}
                 if "twilio_phone_number" not in cols:
                     conn.exec_driver_sql(
                         "ALTER TABLE businesses "
@@ -178,7 +196,7 @@ def init_db() -> None:
                     WHERE table_name='users'
                     """
                 )
-                user_cols = {row[0] for row in result_users}
+                user_cols = {str(row[0]) for row in result_users}
                 if "failed_login_attempts" not in user_cols:
                     conn.exec_driver_sql(
                         "ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER DEFAULT 0"
@@ -203,7 +221,7 @@ def init_db() -> None:
                     WHERE table_name='conversations'
                     """
                 )
-                conv_cols = {row[0] for row in result_conversations}
+                conv_cols = {str(row[0]) for row in result_conversations}
                 if "intent" not in conv_cols:
                     conn.exec_driver_sql(
                         "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS intent VARCHAR(64)"
@@ -225,11 +243,11 @@ def init_db() -> None:
         url = str(engine.url)
         if url.startswith("sqlite"):
             with engine.connect() as conn:
-                cols = []
+                cols = set()
                 result = conn.exec_driver_sql("PRAGMA table_info(businesses)")
                 for row in result:
                     # PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk
-                    cols.append(str(row[1]))
+                    cols.add(str(row[1]))
                 if "retention_enabled" not in cols:
                     conn.exec_driver_sql(
                         "ALTER TABLE businesses ADD COLUMN retention_enabled BOOLEAN DEFAULT 1"
@@ -411,10 +429,10 @@ def init_db() -> None:
                         "ALTER TABLE businesses ADD COLUMN widget_token_expires_at TIMESTAMP NULL"
                     )
                 # Patch users table for new auth fields.
-                user_cols = []
+                user_cols = set()
                 user_result = conn.exec_driver_sql("PRAGMA table_info(users)")
                 for row in user_result:
-                    user_cols.append(str(row[1]))
+                    user_cols.add(str(row[1]))
                 if "failed_login_attempts" not in user_cols:
                     conn.exec_driver_sql(
                         "ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0"
@@ -432,10 +450,10 @@ def init_db() -> None:
                         "ALTER TABLE users ADD COLUMN reset_token_expires_at TIMESTAMP NULL"
                     )
                 # Patch conversations table for intent metadata.
-                conv_cols = []
+                conv_cols = set()
                 conv_result = conn.exec_driver_sql("PRAGMA table_info(conversations)")
                 for row in conv_result:
-                    conv_cols.append(str(row[1]))
+                    conv_cols.add(str(row[1]))
                 if "intent" not in conv_cols:
                     conn.exec_driver_sql(
                         "ALTER TABLE conversations ADD COLUMN intent VARCHAR(64) NULL"
@@ -487,6 +505,8 @@ def init_db() -> None:
         logging.getLogger(__name__).exception("db_schema_migration_failed")
 
     # Ensure a default business row exists for single-tenant operation.
+    if SessionLocal is None:
+        return
     session = SessionLocal()
     try:
         settings = get_settings()

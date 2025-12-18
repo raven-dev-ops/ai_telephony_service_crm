@@ -49,16 +49,6 @@ ignore_missing_imports = true
 warn_unused_ignores = true
 show_error_codes = true
 
-[[tool.mypy.overrides]]
-module = "app.db"
-ignore_errors = true
-warn_unused_ignores = false
-
-[[tool.mypy.overrides]]
-module = "app.db_models"
-ignore_errors = true
-warn_unused_ignores = false
-
 [tool.coverage.run]
 omit = [
     "app/services/twilio_provision.py",
