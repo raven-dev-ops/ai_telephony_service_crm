@@ -27,7 +27,7 @@ Quick Start (local dev)
 2) Owner dashboard  
    - Open `dashboard/index.html` (file:// or `python -m http.server` from repo root).  
    - If running with defaults (no `OWNER_DASHBOARD_TOKEN`/`ADMIN_API_KEY`), you can leave tokens blank and use `X-Business-ID=default_business`.
-   - If using `env.dev.db`, use `X-Owner-Token=dev-owner-token` and either `X-Business-ID=default_business` or the `X-API-Key` printed by `python seed_demo_data.py --reset`.
+   - If using `env.dev.db`, use `X-Owner-Token=dev-owner-token` and either `X-Business-ID=default_business` or fetch the tenant `X-API-Key` from `/v1/admin/businesses` (with `X-Admin-API-Key=dev-admin-key`).
    - Quick investor view: `/planner` serves the PLANNER.md HTML; `dashboard/planner.html` embeds it alongside owner/admin links.
 
 3) Admin dashboard (optional)  

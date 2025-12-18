@@ -638,9 +638,8 @@ def main() -> None:
         finally:
             session.close()
 
-    business_tokens = {"api_key": "", "widget_token": ""}
     if use_db and not args.dry_run:
-        business_tokens = _ensure_business(args.business_id, now=datetime.now(UTC))
+        _ensure_business(args.business_id, now=datetime.now(UTC))
 
     result = seed_demo_data(args.business_id, args.anonymize, dry_run=args.dry_run)
     print(
@@ -650,13 +649,10 @@ def main() -> None:
     print(f"- appointments: {len(result['appointments'])}")
     print(f"- conversations: {len(result['conversations'])}")
     if use_db and not args.dry_run:
-        api_key = business_tokens.get("api_key") or ""
-        widget_token = business_tokens.get("widget_token") or ""
-        print("Tenant tokens (DB mode):")
-        if api_key:
-            print(f"- X-API-Key: {api_key}")
-        if widget_token:
-            print(f"- X-Widget-Token: {widget_token}")
+        print(
+            "Tenant credentials were created/updated. For safety, tokens are not printed.\n"
+            "Retrieve them via the admin API (`GET /v1/admin/businesses`) or the admin dashboard."
+        )
 
 
 if __name__ == "__main__":
