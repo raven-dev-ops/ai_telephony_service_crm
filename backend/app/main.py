@@ -214,9 +214,16 @@ def create_app() -> FastAPI:
     except Exception:
         logger.warning("job_queue_start_failed", exc_info=True)
 
+    shared_dir = repo_root / "shared"
     dashboard_dir = repo_root / "dashboard"
     chat_dir = repo_root / "chat"
     widget_dir = repo_root / "widget"
+    if shared_dir.exists():
+        app.mount(
+            "/shared",
+            StaticFiles(directory=str(shared_dir), html=False),
+            name="shared",
+        )
     if dashboard_dir.exists():
         app.mount(
             "/dashboard",
