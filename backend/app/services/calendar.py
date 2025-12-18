@@ -353,6 +353,23 @@ def _build_busy_ranges(
     return ranges
 
 
+def _parse_datetime_utc(raw: str | None) -> datetime | None:
+    """Parse an ISO8601/RFC3339 datetime and normalize to UTC.
+
+    - Accepts a trailing "Z" and converts to +00:00.
+    - If the timestamp is naive, assumes UTC to preserve internal invariants.
+    """
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
 class CalendarService:
     """Encapsulates calendar operations.
 
@@ -807,26 +824,24 @@ class CalendarService:
         """
         from ..repositories import appointments_repo  # local import
 
-        appt = appointments_repo.find_by_calendar_event(
-            event_id, business_id=business_id
-        )
+        finder = getattr(appointments_repo, "find_by_calendar_event", None)
+        appt = finder(event_id, business_id=business_id) if callable(finder) else None
         if not appt:
             return False
 
-        start_dt = None
-        end_dt = None
-        if start:
-            try:
-                start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
-            except Exception:
-                start_dt = None
-        if end:
-            try:
-                end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
-            except Exception:
-                end_dt = None
+        start_dt = _parse_datetime_utc(start)
+        end_dt = _parse_datetime_utc(end)
+        if start_dt and end_dt and start_dt >= end_dt:
+            start_dt = None
+            end_dt = None
 
         updates = {}
+        current_start = getattr(appt, "start_time", None)
+        current_end = getattr(appt, "end_time", None)
+        if current_start is not None and getattr(current_start, "tzinfo", None) is None:
+            current_start = current_start.replace(tzinfo=UTC)
+        if current_end is not None and getattr(current_end, "tzinfo", None) is None:
+            current_end = current_end.replace(tzinfo=UTC)
         if start_dt:
             updates["start_time"] = start_dt
         if end_dt:
@@ -840,6 +855,15 @@ class CalendarService:
         if cancelled:
             updates["status"] = "CANCELLED"
             updates["job_stage"] = "Cancelled"
+        else:
+            times_changed = False
+            if start_dt and current_start and start_dt != current_start.astimezone(UTC):
+                times_changed = True
+            if end_dt and current_end and end_dt != current_end.astimezone(UTC):
+                times_changed = True
+            if times_changed:
+                updates.setdefault("status", "SCHEDULED")
+                updates.setdefault("job_stage", "Rescheduled")
 
         if updates:
             appointments_repo.update(appt.id, **updates)

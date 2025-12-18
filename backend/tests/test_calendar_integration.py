@@ -16,11 +16,23 @@ from app import config
 client = TestClient(app)
 
 
+def _reset_inmemory_repos() -> None:
+    if hasattr(customers_repo, "_by_id"):
+        customers_repo._by_id.clear()  # type: ignore[attr-defined]
+    if hasattr(customers_repo, "_by_phone"):
+        customers_repo._by_phone.clear()  # type: ignore[attr-defined]
+    if hasattr(customers_repo, "_by_business"):
+        customers_repo._by_business.clear()  # type: ignore[attr-defined]
+    if hasattr(appointments_repo, "_by_id"):
+        appointments_repo._by_id.clear()  # type: ignore[attr-defined]
+    if hasattr(appointments_repo, "_by_business"):
+        appointments_repo._by_business.clear()  # type: ignore[attr-defined]
+    if hasattr(appointments_repo, "_by_customer"):
+        appointments_repo._by_customer.clear()  # type: ignore[attr-defined]
+
+
 def test_calendar_webhook_updates_appointment():
-    customers_repo._by_id.clear()
-    appointments_repo._by_id.clear()
-    appointments_repo._by_business.clear()
-    appointments_repo._by_customer.clear()
+    _reset_inmemory_repos()
 
     cust = customers_repo.upsert(
         name="Cal Tester",
@@ -74,6 +86,129 @@ def test_calendar_webhook_missing_event_returns_ok():
     )
     assert resp.status_code == 200
     assert resp.json()["processed"] is False
+
+
+def test_calendar_webhook_normalizes_dst_offsets_to_utc():
+    _reset_inmemory_repos()
+
+    cust = customers_repo.upsert(
+        name="DST Tester",
+        phone="+15550999999",
+        business_id=DEFAULT_BUSINESS_ID,
+    )
+    # Appointment stored in UTC.
+    start_utc = datetime(2025, 3, 9, 7, 30, tzinfo=UTC)
+    end_utc = datetime(2025, 3, 9, 8, 30, tzinfo=UTC)
+    appt = appointments_repo.create(
+        customer_id=cust.id,
+        start_time=start_utc,
+        end_time=end_utc,
+        service_type="Inspection",
+        is_emergency=False,
+        description="DST check",
+        business_id=DEFAULT_BUSINESS_ID,
+        calendar_event_id="evt_dst",
+    )
+
+    # DST start in many US zones: offset changes from -06:00 to -05:00.
+    resp = client.post(
+        "/v1/calendar/google/webhook",
+        json={
+            "business_id": DEFAULT_BUSINESS_ID,
+            "event_id": "evt_dst",
+            "status": "confirmed",
+            "start": "2025-03-09T01:30:00-06:00",
+            "end": "2025-03-09T03:30:00-05:00",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["processed"] is True
+
+    updated = appointments_repo.get(appt.id)
+    assert updated is not None
+    assert updated.start_time == start_utc
+    assert updated.end_time == end_utc
+    assert updated.start_time.tzinfo == UTC
+    assert updated.end_time.tzinfo == UTC
+
+
+def test_calendar_webhook_naive_timestamps_assume_utc_and_mark_rescheduled():
+    _reset_inmemory_repos()
+
+    cust = customers_repo.upsert(
+        name="Naive TZ Tester",
+        phone="+15550888888",
+        business_id=DEFAULT_BUSINESS_ID,
+    )
+    original_start = datetime(2025, 12, 1, 9, 0, tzinfo=UTC)
+    original_end = datetime(2025, 12, 1, 10, 0, tzinfo=UTC)
+    appt = appointments_repo.create(
+        customer_id=cust.id,
+        start_time=original_start,
+        end_time=original_end,
+        service_type="Repair",
+        is_emergency=False,
+        description="Naive update check",
+        business_id=DEFAULT_BUSINESS_ID,
+        calendar_event_id="evt_naive",
+    )
+
+    resp = client.post(
+        "/v1/calendar/google/webhook",
+        json={
+            "business_id": DEFAULT_BUSINESS_ID,
+            "event_id": "evt_naive",
+            "start": "2025-12-01T10:00:00",
+            "end": "2025-12-01T11:00:00",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["processed"] is True
+
+    updated = appointments_repo.get(appt.id)
+    assert updated is not None
+    assert updated.start_time == datetime(2025, 12, 1, 10, 0, tzinfo=UTC)
+    assert updated.end_time == datetime(2025, 12, 1, 11, 0, tzinfo=UTC)
+    assert updated.job_stage == "Rescheduled"
+
+
+def test_calendar_webhook_ignores_invalid_time_range():
+    _reset_inmemory_repos()
+
+    cust = customers_repo.upsert(
+        name="Invalid Range Tester",
+        phone="+15550777777",
+        business_id=DEFAULT_BUSINESS_ID,
+    )
+    start = datetime(2025, 12, 2, 9, 0, tzinfo=UTC)
+    end = datetime(2025, 12, 2, 10, 0, tzinfo=UTC)
+    appt = appointments_repo.create(
+        customer_id=cust.id,
+        start_time=start,
+        end_time=end,
+        service_type="Install",
+        is_emergency=False,
+        description="Invalid range check",
+        business_id=DEFAULT_BUSINESS_ID,
+        calendar_event_id="evt_invalid",
+    )
+
+    resp = client.post(
+        "/v1/calendar/google/webhook",
+        json={
+            "business_id": DEFAULT_BUSINESS_ID,
+            "event_id": "evt_invalid",
+            "start": "2025-12-02T12:00:00Z",
+            "end": "2025-12-02T11:00:00Z",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["processed"] is True
+
+    updated = appointments_repo.get(appt.id)
+    assert updated is not None
+    assert updated.start_time == start
+    assert updated.end_time == end
 
 
 def test_find_slots_prefers_oauth_user_client(monkeypatch):

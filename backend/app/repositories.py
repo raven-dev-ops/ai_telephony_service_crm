@@ -675,6 +675,24 @@ class DbAppointmentRepository:
         finally:
             session.close()
 
+    def find_by_calendar_event(
+        self, calendar_event_id: str, *, business_id: str | None = None
+    ) -> Optional[Appointment]:
+        """Return the first appointment matching a calendar_event_id for a tenant."""
+        if SessionLocal is None:
+            raise RuntimeError("Database session factory is not available")
+        session = SessionLocal()
+        try:
+            query = session.query(AppointmentDB).filter(
+                AppointmentDB.calendar_event_id == calendar_event_id
+            )
+            if business_id:
+                query = query.filter(AppointmentDB.business_id == business_id)
+            row = query.first()
+            return self._to_model(row) if row else None
+        finally:
+            session.close()
+
     def update(
         self,
         appointment_id: str,

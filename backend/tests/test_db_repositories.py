@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 
@@ -61,6 +62,7 @@ def test_db_appointment_repository_create_and_update() -> None:
     customer_id = "cust-db-1"
     now = datetime.now(UTC)
     end = now + timedelta(hours=1)
+    event_id = f"evt_db_{uuid4()}"
 
     appt = repo.create(
         customer_id=customer_id,
@@ -73,6 +75,7 @@ def test_db_appointment_repository_create_and_update() -> None:
         estimated_value=100,
         job_stage="New",
         business_id=business_id,
+        calendar_event_id=event_id,
         tags=["tag1", "tag2"],
         technician_id="tech-1",
         quoted_value=200,
@@ -86,6 +89,9 @@ def test_db_appointment_repository_create_and_update() -> None:
     fetched = repo.get(appt.id)
     assert fetched is not None
     assert fetched.id == appt.id
+    by_event = repo.find_by_calendar_event(event_id, business_id=business_id)
+    assert by_event is not None
+    assert by_event.id == appt.id
 
     updated = repo.update(
         appt.id,
