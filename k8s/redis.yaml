@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-telephony-redis
+  labels:
+    app: ai-telephony-redis
+spec:
+  selector:
+    app: ai-telephony-redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-telephony-redis
+  labels:
+    app: ai-telephony-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-telephony-redis
+  template:
+    metadata:
+      labels:
+        app: ai-telephony-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          args: ["--save", "", "--appendonly", "no"]
