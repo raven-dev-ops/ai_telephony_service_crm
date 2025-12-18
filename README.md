@@ -19,11 +19,15 @@ Quick Start (local dev)
    # or use provided envs:
    #   uvicorn app.main:app --reload --env-file ..\env.dev.inmemory
    #   uvicorn app.main:app --reload --env-file ..\env.dev.db
+
+   # Optional: seed demo data for dashboards/analytics
+   python seed_demo_data.py --reset               # seeds default_business
    ```
 
 2) Owner dashboard  
    - Open `dashboard/index.html` (file:// or `python -m http.server` from repo root).  
-   - Set `X-API-Key` and `X-Owner-Token` from your tenant (`/v1/admin/businesses`).  
+   - If running with defaults (no `OWNER_DASHBOARD_TOKEN`/`ADMIN_API_KEY`), you can leave tokens blank and use `X-Business-ID=default_business`.
+   - If using `env.dev.db`, use `X-Owner-Token=dev-owner-token` and either `X-Business-ID=default_business` or fetch the tenant `X-API-Key` from `/v1/admin/businesses` (with `X-Admin-API-Key=dev-admin-key`).
    - Quick investor view: `/planner` serves the PLANNER.md HTML; `dashboard/planner.html` embeds it alongside owner/admin links.
 
 3) Admin dashboard (optional)  
