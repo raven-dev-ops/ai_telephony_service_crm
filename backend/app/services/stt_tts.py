@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import asyncio
 import base64
 from abc import ABC, abstractmethod
 import logging
 import time
 from typing import Any
 
+import anyio
 import httpx
 
 from ..config import SpeechSettings, get_settings
@@ -139,7 +139,7 @@ class GoogleCloudSpeechProvider(SpeechProvider):
     def __init__(self, settings: SpeechSettings) -> None:
         self._settings = settings
         self._credentials = None
-        self._token_lock = asyncio.Lock()
+        self._token_lock = anyio.Lock()
 
     def _ensure_credentials(self) -> None:
         if self._credentials is not None:
@@ -200,7 +200,7 @@ class GoogleCloudSpeechProvider(SpeechProvider):
                     raise RuntimeError("Unable to refresh GCP access token")
                 return str(new_token)
 
-            return await asyncio.to_thread(_refresh_sync)
+            return await anyio.to_thread.run_sync(_refresh_sync)
 
     def _stt_language_code(self) -> str:
         return (self._settings.gcp_language_code or "en-US").strip() or "en-US"
