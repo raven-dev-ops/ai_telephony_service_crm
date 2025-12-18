@@ -1,10 +1,10 @@
-# Speech Validation (STT/TTS) — Issue #104
+# Speech Validation (STT/TTS) - Issue #104
 
 This repo includes a repeatable harness for validating speech providers and collecting latency/error baselines for:
 
-- STT latency (audio → transcript)
-- Assistant latency (transcript → reply text)
-- TTS latency (reply text → audio)
+- STT latency (audio -> transcript)
+- Assistant latency (transcript -> reply text)
+- TTS latency (reply text -> audio)
 
 ## Provider configuration
 
@@ -97,4 +97,12 @@ Run the harness in staging with representative audio samples and record:
 - Expected mismatch rate (when using a manifest)
 
 Store JSON reports as build artifacts or attach them to the issue/PR discussion.
+
+## Baseline results (staging)
+
+Fill this in after running the harness in staging:
+
+| Date (UTC) | Provider | Region | Mode | Runs | p50 Total (ms) | p95 Total (ms) | p99 Total (ms) | Empty transcript % | Mismatch % | Notes |
+|---|---|---|---|---:|---:|---:|---:|---:|---:|---|
+|  |  |  | roundtrip/samples |  |  |  |  |  |  |  |
 
