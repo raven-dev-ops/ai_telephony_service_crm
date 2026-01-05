@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.db import SQLALCHEMY_AVAILABLE, SessionLocal
 from app.db_models import FeedbackDB
 from app.main import app
+from app.services.privacy import redact_text
 
 
 client = TestClient(app)
@@ -31,6 +32,7 @@ def _clear_feedback() -> None:
 def test_submit_feedback_records_entry():
     _clear_feedback()
     summary = f"Beta bug {uuid4()}"
+    expected_summary = redact_text(summary)
     resp = client.post(
         "/v1/feedback",
         json={
@@ -48,7 +50,7 @@ def test_submit_feedback_records_entry():
     try:
         row = (
             session.query(FeedbackDB)
-            .filter(FeedbackDB.summary == summary)
+            .filter(FeedbackDB.summary == expected_summary)
             .one_or_none()
         )
         assert row is not None
