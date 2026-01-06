@@ -8,6 +8,7 @@ Audit details
 - Audit date (UTC):
 - Auditor(s):
 - Scope: (GitHub/CI/CD/Cloud Run/Cloud SQL/vendor mgmt/backups/incidents/etc.)
+- Audit criteria: (ISO 27001 Annex A, ISMS policies, Project_Engineering_Whitepaper RGOV1/RGOV2)
 - References:
   - `docs/ISMS/ISMS_SCOPE.md`
   - `docs/ISMS/STATEMENT_OF_APPLICABILITY.md`
@@ -38,6 +39,7 @@ Evidence reviewed (links)
 -------------------------
 Link to the secure evidence share index for this audit period:
 - Evidence pack index:
+- Exceptions reviewed (design docs/issues):
 
 Findings summary
 ----------------
