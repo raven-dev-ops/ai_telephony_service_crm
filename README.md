@@ -65,7 +65,7 @@ Safety, auth, and billing
 - Auth: bcrypt passwords, JWT access/refresh, lockout/reset, rate limits.  
 - Subscription enforcement: `ENFORCE_SUBSCRIPTION=true` blocks voice/chat when not active/trialing; grace reminders and plan caps included.  
 - Retention: periodic purge (`RETENTION_PURGE_INTERVAL_HOURS`), transcript capture is configurable (`capture_transcripts`, per-tenant retention opt-out).  
-- Webhooks: Twilio/Stripe signatures + replay protection; Stripe/QBO callbacks are unauthenticated but rely on signatures/state, while owner/admin routes require tokens in prod (`OWNER_DASHBOARD_TOKEN`, `ADMIN_API_KEY`, `REQUIRE_BUSINESS_API_KEY=true`).
+- Webhooks: Twilio/Stripe signatures + replay protection; Stripe/QBO callbacks are unauthenticated but rely on signatures/state. Stripe webhooks always verify signatures in prod-like envs (prod/staging/qa), while owner/admin routes require tokens in prod (`OWNER_DASHBOARD_TOKEN`, `ADMIN_API_KEY`, `REQUIRE_BUSINESS_API_KEY=true`).
 - OAuth state is signed with `AUTH_STATE_SECRET` for external integrations.
 
 Performance & load smoke (CI)

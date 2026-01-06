@@ -157,6 +157,29 @@ def test_stripe_missing_signature_rejected(monkeypatch):
     assert resp.status_code == 400
 
 
+def test_stripe_signature_required_in_staging_even_when_disabled(monkeypatch):
+    secret = "whsec_test"
+    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.setenv("STRIPE_VERIFY_SIGNATURES", "false")
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", secret)
+    monkeypatch.setenv("STRIPE_USE_STUB", "false")
+    config.get_settings.cache_clear()
+    deps.get_settings.cache_clear()
+    payload = json.dumps(
+        {
+            "id": "evt_staging",
+            "type": "unknown.event",
+            "data": {"object": {"metadata": {"business_id": "default_business"}}},
+        }
+    )
+    resp = client.post(
+        "/v1/billing/webhook",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    assert resp.status_code == 400
+
+
 def test_stripe_invalid_signature_rejected(monkeypatch):
     _setup_stripe_env(monkeypatch)
     payload = json.dumps(

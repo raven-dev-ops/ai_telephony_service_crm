@@ -34,6 +34,15 @@ Unreleased
 
 
 
+0.1.2 - Stripe Webhook Hardening (Non-Prod)
+-------------------------------------------
+
+Date: 2026-01-06
+
+- Stripe webhooks now enforce signature verification in prod-like environments (prod/staging/qa).
+- Staging env template sets `ENVIRONMENT=staging` for correct environment detection.
+
+
 0.1.1 - Integration Webhook Fixes
 ---------------------------------
 

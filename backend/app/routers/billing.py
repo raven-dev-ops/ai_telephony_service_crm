@@ -352,16 +352,17 @@ async def billing_webhook(
     raw_body = await request.body()
     settings = get_settings().stripe
     env = os.getenv("ENVIRONMENT", "dev").lower()
-    require_sig = bool(
-        settings.verify_signatures or (env == "prod" and not settings.use_stub)
-    )
+    public_envs = {"prod", "production", "staging", "stage", "preprod", "qa", "uat"}
+    public_env = env in public_envs
+    require_sig = bool(settings.verify_signatures or public_env)
+    enforce_sig = require_sig and (public_env or not settings.use_stub)
     metrics.billing_webhook_requests += 1
     event_type = ""
     event_id = ""
     business_id = "default_business"
     try:
         event_payload: dict = {}
-        if require_sig and not settings.use_stub:
+        if enforce_sig:
             if not stripe_signature:
                 await audit_service.record_security_event(
                     request=request,
@@ -464,12 +465,7 @@ async def billing_webhook(
             else None
         )
 
-        if (
-            require_sig
-            and not settings.use_stub
-            and event_id
-            and settings.replay_protection_seconds > 0
-        ):
+        if enforce_sig and event_id and settings.replay_protection_seconds > 0:
             check_replay(event_id, settings.replay_protection_seconds)
 
         if event_type == "checkout.session.completed":

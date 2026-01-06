@@ -39,6 +39,13 @@ Release notes here summarize work that implements or documents the design descri
 
 
 
+[0.1.2] - 2026-01-06
+-------------------
+
+- Enforce Stripe webhook signature verification in production-like environments (prod/staging/qa).
+- Staging env template sets `ENVIRONMENT=staging` for correct environment detection.
+
+
 [0.1.1] - 2026-01-05
 -------------------
 
