@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import audioop
 import base64
 import hashlib
 import hmac
 import io
 import json
 import os
+import struct
 import time
 import wave
 from datetime import UTC, datetime, timedelta
@@ -293,6 +293,34 @@ def _stream_min_bytes(sample_rate: int, encoding: str, min_seconds: float) -> in
     return max(1, int(sample_rate * bytes_per_sample * safe_seconds))
 
 
+# audioop was removed in Python 3.13; keep a local mu-law decoder for streaming.
+def _build_mulaw_decode_table() -> tuple[int, ...]:
+    table: list[int] = []
+    for value in range(256):
+        mu_law = (~value) & 0xFF
+        sign = mu_law & 0x80
+        exponent = (mu_law >> 4) & 0x07
+        mantissa = mu_law & 0x0F
+        sample = ((mantissa << 3) + 0x84) << exponent
+        sample -= 0x84
+        if sign:
+            sample = -sample
+        table.append(sample)
+    return tuple(table)
+
+
+_MULAW_DECODE_TABLE = _build_mulaw_decode_table()
+
+
+def _mulaw_to_pcm(payload: bytes) -> bytes:
+    if not payload:
+        return b""
+    pcm = bytearray(len(payload) * 2)
+    for idx, byte_value in enumerate(payload):
+        struct.pack_into("<h", pcm, idx * 2, _MULAW_DECODE_TABLE[byte_value])
+    return bytes(pcm)
+
+
 def _pcm_to_wav_bytes(
     pcm_bytes: bytes, sample_rate: int, sample_width: int = 2
 ) -> bytes:
@@ -315,7 +343,7 @@ def _twilio_payload_to_wav_base64(
     sample_width = 2
     if "mulaw" in encoding_norm or "ulaw" in encoding_norm:
         try:
-            pcm_bytes = audioop.ulaw2lin(payload, sample_width)
+            pcm_bytes = _mulaw_to_pcm(payload)
         except Exception:
             return None
     wav_bytes = _pcm_to_wav_bytes(pcm_bytes, sample_rate, sample_width=sample_width)
