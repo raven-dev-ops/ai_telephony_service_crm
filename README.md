@@ -57,7 +57,7 @@ Architecture (capsule)
 - **Dashboards**: static HTML/JS (`dashboard/index.html`, `dashboard/admin.html`) using `X-API-Key`, `X-Owner-Token`, `X-Admin-API-Key`.  
 - **Widget**: `widget/chat.html` + `widget/embed.js` using `X-Widget-Token`.  
 - **Integrations**: Google Calendar, Twilio/SMS, Stripe, QBO, Gmail—all stubbed by default via env profiles (`env.*.stub`) with signature verification where applicable.
-- **Proxy headers**: container enables proxy headers for Cloud Run; set `TWILIO_STREAM_BASE_URL` / `OAUTH_REDIRECT_BASE` when running behind a proxy without forwarded headers.
+- **Proxy headers**: container enables proxy headers for Cloud Run; set `TWILIO_STREAM_BASE_URL` / `OAUTH_REDIRECT_BASE` when running behind a proxy without forwarded headers. For public Media Streams ingress, set `TWILIO_STREAM_TOKEN` to require a shared token on the WebSocket.
 
 Safety, auth, and billing
 -------------------------

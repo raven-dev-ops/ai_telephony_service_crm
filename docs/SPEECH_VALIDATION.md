@@ -130,19 +130,23 @@ Twilio voice flow modes:
 Current staging config (2026-01-06):
 
 - `SPEECH_PROVIDER=gcp` (ADC)
-- `TWILIO_STREAMING_ENABLED` not set (streaming disabled)
+- `TWILIO_STREAMING_ENABLED=true`
+- `TWILIO_STREAM_BASE_URL=wss://ai-telephony-backend-tcmgy2pf2a-uc.a.run.app/v1/twilio/voice-stream`
+- `TWILIO_STREAM_TOKEN` set (secret)
 - `TWILIO_STREAM_MIN_SECONDS` (default 1.0)
 
 Streaming ingest status:
 
 - WebSocket handler now accepts Twilio Media Streams and converts mu-law audio to WAV before STT.
 - Transcripts are forwarded into `/v1/twilio/voice-stream` for conversation handling.
+- When `TWILIO_STREAM_TOKEN` is set, the WebSocket rejects missing/invalid tokens.
 
 Validation steps:
 
 1) Set `TWILIO_STREAMING_ENABLED=true` and `TWILIO_STREAM_BASE_URL=wss://<ingest-host>/v1/twilio/voice-stream` in staging.
-2) Optionally tune `TWILIO_STREAM_MIN_SECONDS` to batch audio (default 1.0s).
-3) Place test calls and record transcript quality, latency, and no-input handling.
+2) Set `TWILIO_STREAM_TOKEN` to a random value if the ingress is public (the app appends it as `stream_token`).
+3) Optionally tune `TWILIO_STREAM_MIN_SECONDS` to batch audio (default 1.0s).
+4) Place test calls and record transcript quality, latency, and no-input handling.
 
 Twilio streaming results (staging):
 

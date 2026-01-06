@@ -34,6 +34,14 @@ Unreleased
 
 
 
+0.1.4 - Twilio Streaming Token Guard
+------------------------------------
+
+Date: 2026-01-06
+
+- Add optional `TWILIO_STREAM_TOKEN` guard for public Twilio Media Streams WebSocket ingress.
+
+
 0.1.3 - Twilio Media Streams Ingest
 -----------------------------------
 
