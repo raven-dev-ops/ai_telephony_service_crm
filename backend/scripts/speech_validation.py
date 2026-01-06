@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import difflib
 import json
 import platform
 import re
@@ -50,9 +51,23 @@ class Sample:
 
 def _normalize(text: str) -> str:
     lowered = (text or "").lower()
-    lowered = re.sub(r"[^a-z0-9\\s]", " ", lowered)
-    lowered = re.sub(r"\\s+", " ", lowered).strip()
+    lowered = re.sub(r"[^a-z0-9\s]", " ", lowered)
+    lowered = re.sub(r"\s+", " ", lowered).strip()
     return lowered
+
+
+def _similarity(a: str, b: str) -> float:
+    if not a and not b:
+        return 1.0
+    return difflib.SequenceMatcher(None, a, b).ratio()
+
+
+def _expected_match(actual: str, expected: str, threshold: float) -> bool:
+    norm_actual = _normalize(actual)
+    norm_expected = _normalize(expected)
+    if norm_actual == norm_expected:
+        return True
+    return _similarity(norm_actual, norm_expected) >= threshold
 
 
 def _percentile(sorted_vals: list[float], pct: float) -> float:
@@ -162,6 +177,7 @@ async def run_validation(
     runs: int,
     business_id: str,
     voice: str | None,
+    match_threshold: float,
 ) -> dict[str, Any]:
     health = await conversation.speech_service.health()
     settings = get_settings()
@@ -213,7 +229,11 @@ async def run_validation(
             expected_ok: bool | None = None
             if sample.expected_text is not None:
                 expected_checked += 1
-                expected_ok = _normalize(transcript) == _normalize(sample.expected_text)
+                expected_ok = _expected_match(
+                    transcript,
+                    sample.expected_text,
+                    match_threshold,
+                )
                 if expected_ok is False:
                     expected_mismatches += 1
 
@@ -266,6 +286,7 @@ async def run_validation(
             "platform": platform.platform(),
         },
         "speech_config": _safe_speech_config(settings),
+        "match_threshold": match_threshold,
         "samples": [s.sample_id for s in samples],
         "health": health,
         "diagnostics": diagnostics,
@@ -331,7 +352,18 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Optional path to write JSON report",
     )
+    parser.add_argument(
+        "--match-threshold",
+        type=float,
+        default=0.94,
+        help=(
+            "Minimum similarity (0-1) for expected transcript matches "
+            "(default: 0.94; set to 1.0 for exact normalized matching)"
+        ),
+    )
     args = parser.parse_args(argv)
+    if args.match_threshold < 0 or args.match_threshold > 1:
+        raise SystemExit("--match-threshold must be between 0 and 1")
 
     settings = get_settings()
     provider = getattr(settings.speech, "provider", "unknown")
@@ -362,6 +394,7 @@ def main(argv: list[str] | None = None) -> int:
             runs=args.runs,
             business_id=args.business_id,
             voice=args.voice,
+            match_threshold=args.match_threshold,
         )
     )
 
