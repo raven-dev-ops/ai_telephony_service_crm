@@ -1,15 +1,29 @@
 from __future__ import annotations
 
+import audioop
 import base64
 import hashlib
 import hmac
+import io
+import json
 import os
 import time
+import wave
 from datetime import UTC, datetime, timedelta
 from html import escape
 import logging
 
-from fastapi import APIRouter, Form, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from pydantic import BaseModel
 from typing import Dict, TYPE_CHECKING
 
@@ -241,6 +255,7 @@ def _build_stream_url(
     call_sid: str,
     business_id: str,
     lead_source: str | None,
+    from_number: str | None,
 ) -> str:
     """Return the WebSocket URL Twilio should stream audio to.
 
@@ -259,7 +274,52 @@ def _build_stream_url(
     url = f"{url}{sep}call_sid={call_sid}&business_id={business_id}"
     if lead_source:
         url = f"{url}&lead_source={lead_source}"
+    if from_number:
+        url = f"{url}&from_number={from_number}"
     return url
+
+
+def _safe_int(value: object, default: int) -> int:
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+
+
+def _stream_min_bytes(sample_rate: int, encoding: str, min_seconds: float) -> int:
+    encoding_norm = (encoding or "").lower()
+    bytes_per_sample = 1 if ("mulaw" in encoding_norm or "ulaw" in encoding_norm) else 2
+    safe_seconds = max(min_seconds, 0.1)
+    return max(1, int(sample_rate * bytes_per_sample * safe_seconds))
+
+
+def _pcm_to_wav_bytes(
+    pcm_bytes: bytes, sample_rate: int, sample_width: int = 2
+) -> bytes:
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(sample_width)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(pcm_bytes)
+    return buffer.getvalue()
+
+
+def _twilio_payload_to_wav_base64(
+    payload: bytes, encoding: str, sample_rate: int
+) -> str | None:
+    if not payload:
+        return None
+    encoding_norm = (encoding or "").lower()
+    pcm_bytes = payload
+    sample_width = 2
+    if "mulaw" in encoding_norm or "ulaw" in encoding_norm:
+        try:
+            pcm_bytes = audioop.ulaw2lin(payload, sample_width)
+        except Exception:
+            return None
+    wav_bytes = _pcm_to_wav_bytes(pcm_bytes, sample_rate, sample_width=sample_width)
+    return base64.b64encode(wav_bytes).decode("ascii")
 
 
 def _find_next_appointment_for_phone(
@@ -1476,7 +1536,7 @@ async def twilio_voice_assistant(
                     )
         if stream_enabled:
             stream_url = _build_stream_url(
-                request, CallSid, business_id, lead_source_param
+                request, CallSid, business_id, lead_source_param, From
             )
             safe_reply = escape(reply_text or "Connecting you to the assistant.")
             twiml = f"""
@@ -1514,6 +1574,152 @@ async def twilio_voice_assistant(
 </Response>
 """.strip()
         return Response(content=twiml, media_type="text/xml")
+
+
+@router.websocket("/voice-stream")
+async def twilio_voice_stream_websocket(websocket: WebSocket) -> None:
+    """Handle Twilio Media Streams and forward transcripts to the HTTP stream handler."""
+    await websocket.accept()
+    settings = get_settings()
+    if not getattr(settings.telephony, "twilio_streaming_enabled", False):
+        await websocket.close(code=1008)
+        return
+
+    params = websocket.query_params
+    call_sid = params.get("call_sid") or ""
+    business_id = params.get("business_id") or DEFAULT_BUSINESS_ID
+    lead_source = params.get("lead_source")
+    from_number = params.get("from_number")
+    stream_sid = params.get("stream_sid")
+
+    encoding = "audio/x-mulaw"
+    sample_rate = 8000
+    min_seconds = float(
+        getattr(settings.telephony, "twilio_stream_min_seconds", 1.0) or 1.0
+    )
+    buffer = bytearray()
+
+    async def flush_buffer() -> str | None:
+        nonlocal buffer
+        if not buffer:
+            return None
+        audio_b64 = _twilio_payload_to_wav_base64(
+            bytes(buffer), encoding, sample_rate
+        )
+        buffer = bytearray()
+        if not audio_b64:
+            return None
+        transcript = await speech_service.transcribe(audio_b64)
+        transcript = (transcript or "").strip()
+        return transcript or None
+
+    async def handle_transcript(text: str) -> None:
+        if not text or not call_sid:
+            return
+        await twilio_voice_stream(
+            TwilioStreamEvent(
+                call_sid=call_sid,
+                stream_sid=stream_sid,
+                event="media",
+                transcript=text,
+                business_id=business_id,
+                lead_source=lead_source,
+                from_number=from_number,
+            )
+        )
+
+    async def handle_start() -> None:
+        if not call_sid:
+            return
+        await twilio_voice_stream(
+            TwilioStreamEvent(
+                call_sid=call_sid,
+                stream_sid=stream_sid,
+                event="start",
+                business_id=business_id,
+                lead_source=lead_source,
+                from_number=from_number,
+            )
+        )
+
+    async def handle_stop() -> None:
+        if not call_sid:
+            return
+        await twilio_voice_stream(
+            TwilioStreamEvent(
+                call_sid=call_sid,
+                stream_sid=stream_sid,
+                event="stop",
+                business_id=business_id,
+                lead_source=lead_source,
+                from_number=from_number,
+            )
+        )
+
+    try:
+        while True:
+            try:
+                message = await websocket.receive_text()
+            except WebSocketDisconnect:
+                break
+            try:
+                payload = json.loads(message)
+            except json.JSONDecodeError:
+                logger.warning("twilio_stream_invalid_json")
+                continue
+
+            event = (payload.get("event") or "").lower()
+            if event in {"start", "connected"}:
+                start = payload.get("start") or {}
+                call_sid = start.get("callSid") or call_sid
+                stream_sid = start.get("streamSid") or stream_sid
+                media_format = start.get("mediaFormat") or {}
+                encoding = media_format.get("encoding") or encoding
+                sample_rate = _safe_int(
+                    media_format.get("sampleRate"), sample_rate
+                )
+                custom_params = start.get("customParameters") or {}
+                if not from_number:
+                    from_number = custom_params.get("from_number") or custom_params.get(
+                        "from"
+                    )
+                await handle_start()
+                continue
+
+            if event == "media":
+                media = payload.get("media") or {}
+                track = (media.get("track") or "").lower()
+                if track and track != "inbound":
+                    continue
+                raw_payload = media.get("payload") or ""
+                if not raw_payload:
+                    continue
+                try:
+                    audio_bytes = base64.b64decode(raw_payload)
+                except Exception:
+                    logger.warning("twilio_stream_payload_decode_failed")
+                    continue
+                buffer.extend(audio_bytes)
+                min_bytes = _stream_min_bytes(sample_rate, encoding, min_seconds)
+                if len(buffer) >= min_bytes:
+                    transcript = await flush_buffer()
+                    if transcript:
+                        await handle_transcript(transcript)
+                continue
+
+            if event == "stop":
+                transcript = await flush_buffer()
+                if transcript:
+                    await handle_transcript(transcript)
+                await handle_stop()
+                break
+    except Exception:  # pragma: no cover - defensive
+        logger.exception("twilio_stream_websocket_error")
+    finally:
+        try:
+            await websocket.close()
+        except RuntimeError:
+            pass
 
 
 @router.post("/voice-stream", response_model=TwilioStreamResponse)

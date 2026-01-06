@@ -131,21 +131,22 @@ Current staging config (2026-01-06):
 
 - `SPEECH_PROVIDER=gcp` (ADC)
 - `TWILIO_STREAMING_ENABLED` not set (streaming disabled)
+- `TWILIO_STREAM_MIN_SECONDS` (default 1.0)
 
-Gaps before production STT validation:
+Streaming ingest status:
 
-- `/v1/twilio/voice-stream` is an HTTP POST endpoint expecting `transcript`; there is no WebSocket handler for Twilio Media Streams.
-- Twilio Media Streams send 8k mu-law audio; `speech_service` auto-detects WAV/MP3/FLAC/OGG only, so mu-law needs conversion or explicit handling.
+- WebSocket handler now accepts Twilio Media Streams and converts mu-law audio to WAV before STT.
+- Transcripts are forwarded into `/v1/twilio/voice-stream` for conversation handling.
 
-Validation steps once streaming ingest exists:
+Validation steps:
 
-1) Deploy a WebSocket ingest that converts Twilio media frames to base64 audio and calls the STT provider.
-2) Set `TWILIO_STREAMING_ENABLED=true` and `TWILIO_STREAM_BASE_URL=wss://<ingest-host>/v1/twilio/voice-stream` in staging.
+1) Set `TWILIO_STREAMING_ENABLED=true` and `TWILIO_STREAM_BASE_URL=wss://<ingest-host>/v1/twilio/voice-stream` in staging.
+2) Optionally tune `TWILIO_STREAM_MIN_SECONDS` to batch audio (default 1.0s).
 3) Place test calls and record transcript quality, latency, and no-input handling.
 
 Twilio streaming results (staging):
 
 | Date (UTC) | Provider | Ingest | Outcome | Notes |
 |---|---|---|---|---|
-| TBD | gcp/openai | TBD | TBD | Awaiting streaming ingest |
+| TBD | gcp/openai | /v1/twilio/voice-stream (WebSocket) | TBD | Capture p95 latency + transcript accuracy |
 

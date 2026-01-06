@@ -1,3 +1,6 @@
+import base64
+import time
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -5,6 +8,8 @@ from app import config, deps
 from app.repositories import conversations_repo
 from app.metrics import metrics
 from app.deps import DEFAULT_BUSINESS_ID
+from app.services.stt_tts import speech_service
+from app.services.twilio_state import twilio_state_store
 
 
 client = TestClient(app)
@@ -142,3 +147,57 @@ def test_twilio_stream_silence_triggers_callback(monkeypatch):
     queue = metrics.callbacks_by_business.get(DEFAULT_BUSINESS_ID, {})
     assert phone in queue
     assert queue[phone].reason == "NO_INPUT"
+
+
+def test_twilio_streaming_websocket_ingest(monkeypatch):
+    metrics.callbacks_by_business.clear()
+    metrics.twilio_by_business.clear()
+    monkeypatch.setenv("TWILIO_STREAMING_ENABLED", "true")
+    monkeypatch.setenv("TWILIO_STREAM_MIN_SECONDS", "0.01")
+    config.get_settings.cache_clear()
+    deps.get_settings.cache_clear()
+
+    called = {"count": 0}
+
+    async def fake_transcribe(_: str | None) -> str:
+        called["count"] += 1
+        return "I need service tomorrow morning"
+
+    monkeypatch.setattr(speech_service, "transcribe", fake_transcribe)
+
+    with client.websocket_connect(
+        "/v1/twilio/voice-stream?call_sid=CS_WS1&business_id=default_business"
+    ) as ws:
+        ws.send_json(
+            {
+                "event": "start",
+                "start": {
+                    "callSid": "CS_WS1",
+                    "streamSid": "SS_WS1",
+                    "mediaFormat": {
+                        "encoding": "audio/x-mulaw",
+                        "sampleRate": 8000,
+                    },
+                },
+            }
+        )
+        payload = base64.b64encode(b"\xff" * 160).decode("ascii")
+        ws.send_json(
+            {
+                "event": "media",
+                "media": {
+                    "track": "inbound",
+                    "payload": payload,
+                },
+            }
+        )
+
+        link = twilio_state_store.get_call_session("CS_WS1")
+        assert link is not None
+
+        ws.send_json({"event": "stop"})
+        for _ in range(50):
+            if called["count"] > 0:
+                break
+            time.sleep(0.01)
+        assert called["count"] > 0
