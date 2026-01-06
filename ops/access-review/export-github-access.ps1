@@ -70,7 +70,20 @@ function Invoke-GhApiSafe {
         }
     }
 
+    $priorErrorPreference = $ErrorActionPreference
+    $priorNativePreference = $null
+    $nativePreferenceSet = $false
+    if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
+        $priorNativePreference = $PSNativeCommandUseErrorActionPreference
+        $PSNativeCommandUseErrorActionPreference = $false
+        $nativePreferenceSet = $true
+    }
+    $ErrorActionPreference = "Continue"
     $raw = (& gh @args 2>&1) | Out-String
+    $ErrorActionPreference = $priorErrorPreference
+    if ($nativePreferenceSet) {
+        $PSNativeCommandUseErrorActionPreference = $priorNativePreference
+    }
     if ($LASTEXITCODE -ne 0) {
         return [ordered]@{
             ok = $false

@@ -18,6 +18,8 @@ Release notes here summarize work that implements or documents the design descri
 [Unreleased]
 ------------
 - Process: track AGENTS.md in-repo and require PR creation/push for all improvements.
+- Ops: update January 2026 access review log and make GitHub access export resilient to permission errors.
+- Docs: capture Twilio streaming validation status and staging prerequisites for STT providers.
 
 - Implemented initial backend voice assistant, CRM, multi-tenant support, and dashboard prototype as described in the project documentation.
 - Documented SMS opt-out behavior and Twilio wiring in `README.md`, `PRIVACY_POLICY.md`, and `RUNBOOK.md`.
