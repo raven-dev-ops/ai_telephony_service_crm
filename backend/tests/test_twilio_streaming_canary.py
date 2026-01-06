@@ -1,7 +1,9 @@
 import base64
 import time
 
+import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from app.main import app
 from app import config, deps
@@ -154,6 +156,7 @@ def test_twilio_streaming_websocket_ingest(monkeypatch):
     metrics.twilio_by_business.clear()
     monkeypatch.setenv("TWILIO_STREAMING_ENABLED", "true")
     monkeypatch.setenv("TWILIO_STREAM_MIN_SECONDS", "0.01")
+    monkeypatch.setenv("TWILIO_STREAM_TOKEN", "test-stream-token")
     config.get_settings.cache_clear()
     deps.get_settings.cache_clear()
 
@@ -167,6 +170,7 @@ def test_twilio_streaming_websocket_ingest(monkeypatch):
 
     with client.websocket_connect(
         "/v1/twilio/voice-stream?call_sid=CS_WS1&business_id=default_business"
+        "&stream_token=test-stream-token"
     ) as ws:
         ws.send_json(
             {
@@ -201,3 +205,17 @@ def test_twilio_streaming_websocket_ingest(monkeypatch):
                 break
             time.sleep(0.01)
         assert called["count"] > 0
+
+
+def test_twilio_streaming_websocket_requires_token(monkeypatch):
+    monkeypatch.setenv("TWILIO_STREAMING_ENABLED", "true")
+    monkeypatch.setenv("TWILIO_STREAM_TOKEN", "required-token")
+    config.get_settings.cache_clear()
+    deps.get_settings.cache_clear()
+
+    with client.websocket_connect(
+        "/v1/twilio/voice-stream?call_sid=CS_WS_NO_TOKEN&business_id=default_business"
+    ) as ws:
+        with pytest.raises(WebSocketDisconnect) as exc:
+            ws.receive_text()
+    assert exc.value.code == 1008

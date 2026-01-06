@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai-telephony-backend"
-version = "0.1.3"
+version = "0.1.4"
 description = "Backend service for AI telephony assistant and CRM (Phase 1 voice + scheduling)."
 requires-python = ">=3.11"
 dependencies = [

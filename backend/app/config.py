@@ -99,6 +99,7 @@ class TelephonySettings(BaseModel):
         "TWILIO_STREAM_BASE_URL",
         "wss://ai-telephony-backend-tcmgy2pf2a-uc.a.run.app/v1/twilio/voice-stream",
     )
+    twilio_stream_token: str | None = os.getenv("TWILIO_STREAM_TOKEN")
     twilio_stream_min_seconds: float = float(
         os.getenv("TWILIO_STREAM_MIN_SECONDS", "1.0")
     )
@@ -295,6 +296,7 @@ class AppSettings(BaseModel):
             ).lower()
             == "true",
             twilio_stream_base_url=os.getenv("TWILIO_STREAM_BASE_URL"),
+            twilio_stream_token=os.getenv("TWILIO_STREAM_TOKEN"),
             twilio_stream_min_seconds=float(
                 os.getenv("TWILIO_STREAM_MIN_SECONDS", "1.0")
             ),

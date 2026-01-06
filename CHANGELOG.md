@@ -42,6 +42,12 @@ Release notes here summarize work that implements or documents the design descri
 
 
 
+[0.1.4] - 2026-01-06
+-------------------
+
+- Security: add optional `TWILIO_STREAM_TOKEN` guard for public Twilio Media Streams WebSocket ingress.
+
+
 [0.1.3] - 2026-01-06
 -------------------
 

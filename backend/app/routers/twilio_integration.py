@@ -265,6 +265,7 @@ def _build_stream_url(
     settings = get_settings()
     base = getattr(settings, "telephony", None)
     stream_base = getattr(base, "twilio_stream_base_url", None) if base else None
+    stream_token = getattr(base, "twilio_stream_token", None) if base else None
     if stream_base:
         url = stream_base
     else:
@@ -276,6 +277,8 @@ def _build_stream_url(
         url = f"{url}&lead_source={lead_source}"
     if from_number:
         url = f"{url}&from_number={from_number}"
+    if stream_token:
+        url = f"{url}&stream_token={stream_token}"
     return url
 
 
@@ -1612,8 +1615,14 @@ async def twilio_voice_stream_websocket(websocket: WebSocket) -> None:
     if not getattr(settings.telephony, "twilio_streaming_enabled", False):
         await websocket.close(code=1008)
         return
+    stream_token = getattr(settings.telephony, "twilio_stream_token", None)
 
     params = websocket.query_params
+    if stream_token:
+        provided_token = params.get("stream_token")
+        if not provided_token or not hmac.compare_digest(provided_token, stream_token):
+            await websocket.close(code=1008)
+            return
     call_sid = params.get("call_sid") or ""
     business_id = params.get("business_id") or DEFAULT_BUSINESS_ID
     lead_source = params.get("lead_source")
