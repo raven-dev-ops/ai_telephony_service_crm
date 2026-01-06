@@ -139,6 +139,7 @@ class GoogleCloudSpeechProvider(SpeechProvider):
     def __init__(self, settings: SpeechSettings) -> None:
         self._settings = settings
         self._credentials: Any | None = None
+        self._quota_project_id: str | None = None
         self._token_lock = anyio.Lock()
 
     def _ensure_credentials(self) -> None:
@@ -150,8 +151,13 @@ class GoogleCloudSpeechProvider(SpeechProvider):
             raise RuntimeError(
                 "google-auth is required for GCP speech provider"
             ) from exc
-        creds, _project = google.auth.default(scopes=[self._SCOPE])
+        creds, project_id = google.auth.default(scopes=[self._SCOPE])
         self._credentials = creds
+        quota_project = getattr(creds, "quota_project_id", None)
+        if quota_project:
+            self._quota_project_id = str(quota_project)
+        elif project_id:
+            self._quota_project_id = str(project_id)
 
     async def _access_token(self) -> str:
         self._ensure_credentials()
@@ -210,6 +216,12 @@ class GoogleCloudSpeechProvider(SpeechProvider):
                 return str(new_token)
 
             return await anyio.to_thread.run_sync(_refresh_sync)
+
+    def _auth_headers(self, token: str) -> dict[str, str]:
+        headers = {"Authorization": f"Bearer {token}"}
+        if self._quota_project_id:
+            headers["x-goog-user-project"] = self._quota_project_id
+        return headers
 
     def _stt_language_code(self) -> str:
         return (self._settings.gcp_language_code or "en-US").strip() or "en-US"
@@ -291,10 +303,8 @@ class GoogleCloudSpeechProvider(SpeechProvider):
             "config": config,
             "audio": {"content": audio},
         }
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        }
+        headers = self._auth_headers(token)
+        headers["Content-Type"] = "application/json"
         timeout = httpx.Timeout(self._settings.gcp_timeout_seconds, connect=6.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(url, headers=headers, json=payload)
@@ -329,10 +339,8 @@ class GoogleCloudSpeechProvider(SpeechProvider):
             "voice": voice_obj,
             "audioConfig": {"audioEncoding": self._settings.gcp_tts_audio_encoding},
         }
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        }
+        headers = self._auth_headers(token)
+        headers["Content-Type"] = "application/json"
         timeout = httpx.Timeout(self._settings.gcp_timeout_seconds, connect=6.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(url, headers=headers, json=payload)
@@ -354,7 +362,7 @@ class GoogleCloudSpeechProvider(SpeechProvider):
                 "detail": str(exc),
             }
         url = "https://texttospeech.googleapis.com/v1/voices"
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = self._auth_headers(token)
         try:
             timeout = httpx.Timeout(4.0, connect=2.0)
             async with httpx.AsyncClient(timeout=timeout) as client:

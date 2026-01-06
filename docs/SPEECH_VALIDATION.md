@@ -42,6 +42,8 @@ Optional:
 Notes:
 - The Google STT path supports common encodings (WAV/LINEAR16, MP3, FLAC, OGG/Opus) via best-effort detection.
 - For **samples mode**, use `.wav` files for predictable results.
+- When using local Application Default Credentials, set the quota project to avoid 403s:
+  `gcloud auth application-default set-quota-project <project-id>`.
 
 ## Running the harness
 
