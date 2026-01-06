@@ -5,12 +5,12 @@ Register
 --------
 | Vendor | Purpose | Data Processed | DPA/Security Review | Evidence | Last Review | Owner | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Twilio | Voice/SMS, webhooks | Phone numbers, call metadata, transcripts (short), voicemail URLs | DPA required; enable signature verification (in place) | Pending (need signed DPA link) | Pending | Eng | Use restricted webhook IPs and signature checks; rotate auth tokens quarterly. |
-| Stripe | Billing/subscriptions | Customer name/email, subscription ids, payment links (no PAN) | DPA required; PCI handled by Stripe | Pending (need DPA + PCI AOC link) | Pending | Eng/Finance | Webhook signatures enforced; test mode by default. |
-| Google (Calendar, OAuth, GCS) | Scheduling, storage | Calendar events, auth tokens, dashboard assets | DPA via Workspace; security review complete | Pending (Workspace DPA ref) | 2025-12-12 | Eng | OAuth tokens stored in Secret Manager; limited scopes. |
-| QuickBooks Online | Invoicing/exports | Customer/contact details, invoice metadata | DPA required | Pending (need Intuit DPA) | Pending | Finance | Sandbox by default; production only with owner approval. |
-| OpenAI or other LLM APIs (optional) | Intent assist | Snippets of transcript | Vendor review + data handling restrictions before enabling | Pending (vendor security review) | Pending | Eng/Product | Off by default; enable only per-tenant with data policy acknowledged. |
-| Email provider (e.g., Gmail/Workspace) | Owner/customer email | Owner email, summaries | DPA via Workspace | Pending (Workspace DPA ref) | 2025-12-12 | Eng | Disable if not needed; use service account with least privilege. |
+| Twilio | Voice/SMS, webhooks | Phone numbers, call metadata, transcripts (short), voicemail URLs | DPA link recorded; trust center compliance noted | https://www.twilio.com/legal/data-protection-addendum, https://www.twilio.com/trust | 2026-01-06 | Eng | Use restricted webhook IPs and signature checks; rotate auth tokens quarterly. |
+| Stripe | Billing/subscriptions | Customer name/email, subscription ids, payment links (no PAN) | DPA link recorded; security docs linked (PCI/SOC) | https://stripe.com/legal/dpa, https://stripe.com/docs/security/stripe | 2026-01-06 | Eng/Finance | Webhook signatures enforced; test mode by default. |
+| Google (Calendar, OAuth, GCS) | Scheduling, storage | Calendar events, auth tokens, dashboard assets | Cloud + Workspace DPA links recorded; compliance docs linked | https://cloud.google.com/terms/data-processing-addendum, https://workspace.google.com/terms/dpa_terms.html, https://cloud.google.com/security/compliance | 2026-01-06 | Eng | OAuth tokens stored in Secret Manager; limited scopes. |
+| QuickBooks Online | Invoicing/exports | Customer/contact details, invoice metadata | DPA link recorded; security portal link | https://www.intuit.com/terms/dpa/, https://security.intuit.com/ | 2026-01-06 | Finance | Sandbox by default; production only with owner approval. |
+| OpenAI or other LLM APIs (optional) | Intent assist | Snippets of transcript | DPA link recorded; security review pending | https://openai.com/policies/data-processing-addendum | 2026-01-06 | Eng/Product | Off by default; enable only per-tenant with data policy acknowledged. |
+| Email provider (e.g., Gmail/Workspace) | Owner/customer email | Owner email, summaries | Workspace DPA link recorded; compliance docs linked | https://workspace.google.com/terms/dpa_terms.html, https://cloud.google.com/security/compliance | 2026-01-06 | Eng | Disable if not needed; use service account with least privilege. |
 
 Management
 ----------
