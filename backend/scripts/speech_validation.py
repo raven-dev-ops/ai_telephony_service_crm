@@ -355,10 +355,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--match-threshold",
         type=float,
-        default=0.94,
+        default=1.0,
         help=(
             "Minimum similarity (0-1) for expected transcript matches "
-            "(default: 0.94; set to 1.0 for exact normalized matching)"
+            "(default: 1.0 for exact normalized matching)"
         ),
     )
     args = parser.parse_args(argv)
